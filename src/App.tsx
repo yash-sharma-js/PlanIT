@@ -15,6 +15,7 @@ import Projects from "./pages/Projects";
 import ProjectDetails from "./pages/ProjectDetails";
 import CreateProject from "./pages/CreateProject";
 import NotFound from "./pages/NotFound";
+import Profile from "./pages/Profile";
 
 // Layout
 import AuthLayout from "./components/layouts/AuthLayout";
@@ -59,6 +60,7 @@ const AppRoutes = () => {
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/new" element={<CreateProject />} />
         <Route path="/projects/:id" element={<ProjectDetails />} />
+        <Route path="/profile" element={<Profile />} />
       </Route>
 
       {/* Redirect root to dashboard */}
