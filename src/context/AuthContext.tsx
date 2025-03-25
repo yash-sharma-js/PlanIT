@@ -1,5 +1,5 @@
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
 
 // Define user type
@@ -39,7 +39,7 @@ const DEMO_USERS = [
   },
 ];
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -104,6 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password,
       name,
+      avatar: "", // Adding avatar to fix type issue
     };
     
     // Add to demo users (this is just for demo, in real app we'd store in database)
