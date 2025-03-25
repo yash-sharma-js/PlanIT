@@ -21,12 +21,15 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 
 const DashboardLayout = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Close mobile menu when route changes
@@ -73,69 +76,7 @@ const DashboardLayout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex lg:w-64 flex-col bg-card border-r fixed h-full">
-        <div className="p-4 border-b">
-          <h1 className="font-bold text-xl">TaskSphere</h1>
-        </div>
-        
-        <nav className="flex-1 overflow-y-auto p-4">
-          <ul className="space-y-1">
-            {navigationItems.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={({ isActive }) =>
-                    `flex items-center px-4 py-3 rounded-md transition-all ${
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "hover:bg-secondary"
-                    }`
-                  }
-                >
-                  {item.icon}
-                  <span className="ml-3">{item.name}</span>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        
-        <div className="p-4 border-t mt-auto">
-          {user && (
-            <div className="flex items-center">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
-              </Avatar>
-              <div className="ml-3 flex-1 truncate">
-                <p className="font-medium">{user.name}</p>
-                <p className="text-sm text-muted-foreground truncate">
-                  {user.email}
-                </p>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="ml-1">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>Profile</DropdownMenuItem>
-                  <DropdownMenuItem>Settings</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Log out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
-        </div>
-      </aside>
-
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 border-b bg-background z-30 px-4 flex items-center justify-between">
         <div className="flex items-center">
@@ -151,10 +92,12 @@ const DashboardLayout = () => {
         </div>
         
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+          
           {location.pathname === "/projects" && (
             <Button size="sm" onClick={() => navigate("/projects/new")}>
               <Plus className="h-4 w-4 mr-1" />
-              New Project
+              New
             </Button>
           )}
           
@@ -178,10 +121,76 @@ const DashboardLayout = () => {
         </div>
       </div>
 
+      {/* Sidebar - Desktop */}
+      <aside className="hidden lg:flex lg:w-64 flex-col bg-sidebar fixed h-full">
+        <div className="p-4 border-b border-sidebar-border">
+          <h1 className="font-bold text-xl text-sidebar-foreground">TaskSphere</h1>
+        </div>
+        
+        <nav className="flex-1 overflow-y-auto p-4">
+          <ul className="space-y-1">
+            {navigationItems.map((item) => (
+              <li key={item.path}>
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `flex items-center px-4 py-3 rounded-md transition-all ${
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-primary"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                    }`
+                  }
+                >
+                  {item.icon}
+                  <span className="ml-3">{item.name}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        
+        <div className="p-4 border-t border-sidebar-border mt-auto">
+          <div className="flex items-center justify-between mb-4">
+            <ThemeToggle />
+          </div>
+          
+          {user && (
+            <div className="flex items-center">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+              </Avatar>
+              <div className="ml-3 flex-1 truncate">
+                <p className="font-medium text-sidebar-foreground">{user.name}</p>
+                <p className="text-sm text-sidebar-foreground/70 truncate">
+                  {user.email}
+                </p>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="ml-1 text-sidebar-foreground">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem>Profile</DropdownMenuItem>
+                  <DropdownMenuItem>Settings</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
+      </aside>
+
       {/* Mobile Sidebar */}
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-20 bg-background/80 backdrop-blur-sm">
-          <div className="fixed top-16 left-0 bottom-0 w-64 bg-card border-r animate-slide-in">
+          <div className="fixed top-16 left-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border animate-slide-in">
             <nav className="flex-1 overflow-y-auto p-4">
               <ul className="space-y-1">
                 {navigationItems.map((item) => (
@@ -191,8 +200,8 @@ const DashboardLayout = () => {
                       className={({ isActive }) =>
                         `flex items-center px-4 py-3 rounded-md transition-all ${
                           isActive
-                            ? "bg-primary/10 text-primary"
-                            : "hover:bg-secondary"
+                            ? "bg-sidebar-accent text-sidebar-primary"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent/50"
                         }`
                       }
                     >
@@ -208,7 +217,7 @@ const DashboardLayout = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 lg:pl-64 pt-16 lg:pt-0">
+      <main className="flex-1 lg:pl-64 pt-16 lg:pt-0 min-h-screen">
         <div className="p-4 md:p-6 lg:p-8 h-full animate-fade-in">
           <Outlet />
         </div>

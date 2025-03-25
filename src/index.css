@@ -89,7 +89,7 @@
 /* Advanced animations */
 @layer components {
   .glass-panel {
-    @apply bg-white/90 dark:bg-black/80 backdrop-blur-md border border-white/20 dark:border-black/20 shadow-glass;
+    @apply bg-card/90 backdrop-blur-md border border-border shadow-glass;
   }
 
   .glass-panel-hover {
@@ -154,8 +154,8 @@
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
