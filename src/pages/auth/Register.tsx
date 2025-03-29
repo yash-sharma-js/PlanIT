@@ -5,12 +5,12 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
 const Register = () => {
   const [name, setName] = useState("");
+  const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +20,7 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name || !email || !password) {
+    if (!name || !userName || !email || !password) {
       toast.error("Please fill in all fields");
       return;
     }
@@ -33,7 +33,7 @@ const Register = () => {
     setIsLoading(true);
     
     try {
-      await register(name, email, password);
+      await register(name, email, password, userName);
       navigate("/");
     } catch (error) {
       // Error is already handled in the auth context
@@ -60,6 +60,18 @@ const Register = () => {
               placeholder="John Doe"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={isLoading}
+              className="h-11"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="userName">Username</Label>
+            <Input
+              id="userName"
+              type="text"
+              placeholder="johndoe"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
               disabled={isLoading}
               className="h-11"
             />

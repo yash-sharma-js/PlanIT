@@ -7,6 +7,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  userName: string;
   avatar?: string;
 }
 
@@ -15,7 +16,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, userName: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -35,6 +36,7 @@ const DEMO_USERS = [
     email: "user@example.com",
     password: "password",
     name: "Demo User",
+    userName: "demouser",
     avatar: "",
   },
 ];
@@ -85,7 +87,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // Register function
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, password: string, userName: string) => {
     setLoading(true);
     
     // Simulate API call delay
@@ -98,13 +100,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error("User with this email already exists");
     }
     
+    // Check if username already exists
+    if (DEMO_USERS.some(u => u.userName === userName)) {
+      toast.error("Username already taken");
+      setLoading(false);
+      throw new Error("Username already taken");
+    }
+    
     // Create new user (in a real app, this would be an API call)
     const newUser = {
       id: `${DEMO_USERS.length + 1}`,
       email,
       password,
       name,
-      avatar: "", // Adding avatar to fix type issue
+      userName,
+      avatar: "", 
     };
     
     // Add to demo users (this is just for demo, in real app we'd store in database)

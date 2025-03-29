@@ -12,6 +12,7 @@ const Profile = () => {
   const { user, logout } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(user?.name || "");
+  const [userName, setUserName] = useState(user?.userName || "");
   const [email, setEmail] = useState(user?.email || "");
 
   // Generate initials for avatar fallback
@@ -42,6 +43,7 @@ const Profile = () => {
           </Avatar>
           <div>
             <CardTitle className="text-2xl">{user?.name}</CardTitle>
+            <CardDescription>@{user?.userName || ""}</CardDescription>
             <CardDescription>{user?.email}</CardDescription>
           </div>
         </CardHeader>
@@ -53,6 +55,15 @@ const Profile = () => {
                 id="name" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
+                disabled={!isEditing}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="userName">Username</Label>
+              <Input 
+                id="userName" 
+                value={userName} 
+                onChange={(e) => setUserName(e.target.value)} 
                 disabled={!isEditing}
               />
             </div>

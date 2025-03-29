@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarDays, ChevronRight, Clock, Plus } from "lucide-react";
+import { Users, ChevronRight, Clock, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ const MOCK_TASKS = [
     dueDate: "2023-10-15",
     priority: "high",
     status: "in-progress",
+    assignedTo: "demouser"
   },
   {
     id: "2",
@@ -25,6 +26,7 @@ const MOCK_TASKS = [
     dueDate: "2023-10-18",
     priority: "medium",
     status: "to-do",
+    assignedTo: "demouser"
   },
   {
     id: "3",
@@ -33,6 +35,7 @@ const MOCK_TASKS = [
     dueDate: "2023-10-12",
     priority: "low",
     status: "in-progress",
+    assignedTo: "demouser"
   },
   {
     id: "4",
@@ -41,6 +44,7 @@ const MOCK_TASKS = [
     dueDate: "2023-10-20",
     priority: "high",
     status: "to-do",
+    assignedTo: "demouser"
   },
 ];
 
@@ -78,6 +82,7 @@ const MOCK_PROJECTS = [
     progress: 65,
     tasks: 12,
     completedTasks: 8,
+    assignedUsers: ["demouser"]
   },
   {
     id: "2",
@@ -86,6 +91,7 @@ const MOCK_PROJECTS = [
     progress: 30,
     tasks: 24,
     completedTasks: 7,
+    assignedUsers: ["demouser"]
   },
   {
     id: "3",
@@ -94,6 +100,7 @@ const MOCK_PROJECTS = [
     progress: 80,
     tasks: 16,
     completedTasks: 13,
+    assignedUsers: ["demouser"]
   },
 ];
 
@@ -158,7 +165,7 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="glass-panel glass-panel-hover">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
@@ -260,13 +267,13 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {/* Tasks List */}
         <Card className="glass-panel md:col-span-1 lg:col-span-1">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle>Pending Tasks</CardTitle>
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/tasks")}>
+              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/projects")}>
                 View all
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
@@ -290,8 +297,10 @@ const Dashboard = () => {
                       {task.project}
                     </p>
                     <div className="flex items-center pt-1 text-xs text-muted-foreground">
-                      <CalendarDays className="mr-1 h-3 w-3" />
+                      <Clock className="mr-1 h-3 w-3" />
                       <span>{formatDate(task.dueDate)}</span>
+                      <span className="mx-1">•</span>
+                      <span>Assigned to: @{task.assignedTo}</span>
                     </div>
                   </div>
                 </div>
@@ -311,8 +320,8 @@ const Dashboard = () => {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle>Scheduled Meetings</CardTitle>
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/calendar")}>
-                Calendar
+              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/meetings")}>
+                View all
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
@@ -335,8 +344,8 @@ const Dashboard = () => {
                       <span>{meeting.time}</span>
                     </div>
                     <div className="flex items-center pt-1 text-xs text-muted-foreground">
-                      <CalendarDays className="mr-1 h-3 w-3" />
-                      <span>{formatDate(meeting.date)}</span>
+                      <Users className="mr-1 h-3 w-3" />
+                      <span>{meeting.participants} participants</span>
                     </div>
                   </div>
                 </div>
@@ -344,7 +353,7 @@ const Dashboard = () => {
             </div>
           </CardContent>
           <CardFooter>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={() => navigate("/meetings")}>
               <Plus className="mr-2 h-4 w-4" />
               Schedule Meeting
             </Button>
@@ -376,9 +385,10 @@ const Dashboard = () => {
                     <span className="text-sm font-medium">{project.progress}%</span>
                   </div>
                   <Progress value={project.progress} className="h-1.5" />
-                  <p className="text-xs text-muted-foreground">
-                    {project.completedTasks} of {project.tasks} tasks completed
-                  </p>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{project.completedTasks} of {project.tasks} tasks completed</span>
+                    <span>Assigned to: @{project.assignedUsers.join(', @')}</span>
+                  </div>
                 </div>
               ))}
             </div>

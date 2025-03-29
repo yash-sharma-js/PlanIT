@@ -1,10 +1,11 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, 
   Calendar,
-  Plus 
+  Plus,
+  Users 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,13 +31,24 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+
+// Mock users for assignment
+const MOCK_USERS = [
+  { id: "1", name: "Demo User", userName: "demouser" },
+  { id: "2", name: "John Doe", userName: "johndoe" },
+  { id: "3", name: "Jane Smith", userName: "janesmith" },
+  { id: "4", name: "Alex Johnson", userName: "alexj" },
+];
 
 const CreateProject = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -44,8 +56,23 @@ const CreateProject = () => {
     dueDate: undefined as Date | undefined,
     status: "planning",
     priority: "medium",
+    assignedUsers: [] as string[]
   });
+  const [availableUsers, setAvailableUsers] = useState<typeof MOCK_USERS>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    // Simulate fetching users
+    setAvailableUsers(MOCK_USERS);
+    
+    // Auto-assign current user
+    if (user?.userName) {
+      setFormData(prev => ({
+        ...prev,
+        assignedUsers: [user.userName]
+      }));
+    }
+  }, [user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -58,6 +85,29 @@ const CreateProject = () => {
 
   const handleDateChange = (name: string, date: Date | undefined) => {
     setFormData(prev => ({ ...prev, [name]: date }));
+  };
+
+  const handleUserToggle = (userName: string) => {
+    setFormData(prev => {
+      const isAssigned = prev.assignedUsers.includes(userName);
+      
+      if (isAssigned) {
+        // Don't allow removing the current user
+        if (user?.userName === userName) {
+          toast.error("You cannot remove yourself from the project");
+          return prev;
+        }
+        return {
+          ...prev,
+          assignedUsers: prev.assignedUsers.filter(u => u !== userName)
+        };
+      } else {
+        return {
+          ...prev,
+          assignedUsers: [...prev.assignedUsers, userName]
+        };
+      }
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -79,6 +129,11 @@ const CreateProject = () => {
       return;
     }
     
+    if (formData.assignedUsers.length === 0) {
+      toast.error("At least one user must be assigned to the project");
+      return;
+    }
+    
     // Submit form
     setIsSubmitting(true);
     
@@ -91,9 +146,9 @@ const CreateProject = () => {
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col space-y-3 mb-8">
+      <div className="flex flex-col space-y-3 mb-2">
         <Button 
           variant="ghost" 
           size="sm" 
@@ -253,6 +308,39 @@ const CreateProject = () => {
                     <SelectItem value="high">High</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Assigned Users */}
+            <div className="space-y-3">
+              <Label>Assign Users <span className="text-destructive">*</span></Label>
+              <div className="border rounded-md p-4">
+                <div className="flex items-center mb-2">
+                  <Users className="h-5 w-5 mr-2 text-muted-foreground" />
+                  <span className="font-medium text-sm">Team Members</span>
+                </div>
+                <div className="space-y-2">
+                  {availableUsers.map((availableUser) => (
+                    <div key={availableUser.id} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`user-${availableUser.id}`} 
+                        checked={formData.assignedUsers.includes(availableUser.userName)}
+                        onCheckedChange={() => handleUserToggle(availableUser.userName)}
+                        disabled={isSubmitting || (user?.userName === availableUser.userName)}
+                      />
+                      <label
+                        htmlFor={`user-${availableUser.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                      >
+                        {availableUser.name}
+                        <span className="ml-1 text-muted-foreground">(@{availableUser.userName})</span>
+                        {user?.userName === availableUser.userName && (
+                          <span className="ml-1 text-xs text-muted-foreground">(you)</span>
+                        )}
+                      </label>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </CardContent>

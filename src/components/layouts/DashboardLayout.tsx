@@ -3,10 +3,9 @@ import { useState, useEffect } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { 
-  Calendar, 
+  Users, 
   LayoutDashboard, 
   Folders, 
-  Settings, 
   LogOut,
   Menu,
   X,
@@ -24,7 +23,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { toast } from "sonner";
 
 const DashboardLayout = () => {
   const { user, logout } = useAuth();
@@ -60,19 +58,14 @@ const DashboardLayout = () => {
       icon: <Folders className="w-5 h-5" />,
     },
     {
-      name: "Calendar",
-      path: "/calendar",
-      icon: <Calendar className="w-5 h-5" />,
+      name: "Meetings",
+      path: "/meetings",
+      icon: <Users className="w-5 h-5" />,
     },
     {
       name: "Profile",
       path: "/profile",
       icon: <User className="w-5 h-5" />,
-    },
-    {
-      name: "Settings",
-      path: "/settings",
-      icon: <Settings className="w-5 h-5" />,
     },
   ];
 
@@ -118,10 +111,6 @@ const DashboardLayout = () => {
               <DropdownMenuItem onClick={() => navigate("/profile")}>
                 <User className="mr-2 h-4 w-4" />
                 Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate("/settings")}>
-                <Settings className="mr-2 h-4 w-4" /> 
-                Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive">
@@ -175,23 +164,19 @@ const DashboardLayout = () => {
               <div className="ml-3 flex-1 truncate">
                 <p className="font-medium text-sidebar-foreground">{user.name}</p>
                 <p className="text-sm text-sidebar-foreground/70 truncate">
-                  {user.email}
+                  @{user.userName || user.email}
                 </p>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="ml-1 text-sidebar-foreground">
-                    <Settings className="h-4 w-4" />
+                    <User className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => navigate("/profile")}>
                     <User className="mr-2 h-4 w-4" />
                     Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/settings")}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-destructive">

@@ -4,7 +4,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 // Pages
@@ -16,6 +15,7 @@ import ProjectDetails from "./pages/ProjectDetails";
 import CreateProject from "./pages/CreateProject";
 import NotFound from "./pages/NotFound";
 import Profile from "./pages/Profile";
+import Meetings from "./pages/Meetings";
 
 // Layout
 import AuthLayout from "./components/layouts/AuthLayout";
@@ -56,15 +56,14 @@ const AppRoutes = () => {
 
       {/* Protected Routes */}
       <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/new" element={<CreateProject />} />
         <Route path="/projects/:id" element={<ProjectDetails />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/meetings" element={<Meetings />} />
       </Route>
-
-      {/* Redirect root to dashboard */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
