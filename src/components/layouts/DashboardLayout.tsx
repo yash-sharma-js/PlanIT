@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -31,12 +30,10 @@ const DashboardLayout = () => {
   const isMobile = useIsMobile();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // Close mobile menu when route changes
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
-  // Generate initials for avatar fallback
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -45,7 +42,6 @@ const DashboardLayout = () => {
       .toUpperCase();
   };
 
-  // Navigation items
   const navigationItems = [
     {
       name: "Dashboard",
@@ -76,7 +72,6 @@ const DashboardLayout = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 border-b bg-background z-30 px-4 flex items-center justify-between">
         <div className="flex items-center">
           <Button 
@@ -87,7 +82,7 @@ const DashboardLayout = () => {
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <h1 className="font-bold">TaskSphere</h1>
+          <h1 className="font-bold">PlanIT</h1>
         </div>
         
         <div className="flex items-center gap-2">
@@ -122,10 +117,9 @@ const DashboardLayout = () => {
         </div>
       </div>
 
-      {/* Sidebar - Desktop */}
       <aside className="hidden lg:flex lg:w-64 flex-col bg-sidebar fixed h-full">
         <div className="p-4 border-b border-sidebar-border">
-          <h1 className="font-bold text-xl text-sidebar-foreground">TaskSphere</h1>
+          <h1 className="font-bold text-xl text-sidebar-foreground">PlanIT</h1>
         </div>
         
         <nav className="flex-1 overflow-y-auto p-4">
@@ -190,7 +184,6 @@ const DashboardLayout = () => {
         </div>
       </aside>
 
-      {/* Mobile Sidebar */}
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-20 bg-background/80 backdrop-blur-sm">
           <div className="fixed top-16 left-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border animate-slide-in">
@@ -219,7 +212,6 @@ const DashboardLayout = () => {
         </div>
       )}
 
-      {/* Main Content */}
       <main className="flex-1 lg:pl-64 pt-16 lg:pt-0 min-h-screen">
         <div className="p-4 md:p-6 lg:p-8 h-full animate-fade-in">
           <Outlet />

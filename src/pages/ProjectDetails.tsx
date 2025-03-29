@@ -1,5 +1,6 @@
+
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { 
   Calendar, 
   Clock, 
@@ -18,7 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { 
   DropdownMenu,
@@ -27,9 +28,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import TaskForm from "@/components/TaskForm";
+import TeamMemberForm from "@/components/TeamMemberForm";
 
 interface ProjectData {
   id: string;
@@ -81,6 +91,10 @@ const ProjectDetails = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [activeTab, setActiveTab] = useState("overview");
+  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
+  const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
+  const [showDeleteTaskDialog, setShowDeleteTaskDialog] = useState<string | null>(null);
+  const [showRemoveMemberDialog, setShowRemoveMemberDialog] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -97,7 +111,7 @@ const ProjectDetails = () => {
         .from('projects')
         .select('*')
         .eq('id', projectId)
-        .single();
+        .maybeSingle();
       
       if (projectError) {
         console.error('Error fetching project:', projectError);
@@ -173,9 +187,21 @@ const ProjectDetails = () => {
       const totalTasks = formattedTasks.length;
       const completedTasks = formattedTasks.filter(task => task.status === 'completed').length;
       
+      // Calculate progress based on completed tasks
+      const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      
+      // Update project with calculated progress
+      if (progress !== projectData.progress) {
+        await supabase
+          .from('projects')
+          .update({ progress })
+          .eq('id', projectId);
+      }
+      
       // Set project with related data
       setProject({
         ...projectData,
+        progress,
         team: formattedTeam,
         tasks: {
           total: totalTasks,
@@ -188,6 +214,177 @@ const ProjectDetails = () => {
     } catch (error) {
       console.error('Error in fetchProjectData:', error);
       toast.error("Failed to load project details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTaskStatusChange = async (taskId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', taskId);
+      
+      if (error) throw error;
+      
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        project_id: id,
+        user_name: user?.userName || 'Unknown user',
+        action: `marked a task as ${newStatus}`
+      });
+      
+      // Update local state
+      setTasks(prev => prev.map(task => 
+        task.id === taskId ? { ...task, status: newStatus } : task
+      ));
+      
+      // Recalculate project progress
+      const totalTasks = tasks.length;
+      const completedTasks = tasks.filter(t => 
+        t.id === taskId ? newStatus === 'completed' : t.status === 'completed'
+      ).length;
+      
+      const newProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      
+      if (project) {
+        setProject({
+          ...project,
+          progress: newProgress,
+          tasks: {
+            total: totalTasks,
+            completed: completedTasks
+          }
+        });
+        
+        // Update project progress in database
+        await supabase
+          .from('projects')
+          .update({ progress: newProgress })
+          .eq('id', id);
+      }
+      
+      toast.success(`Task marked as ${newStatus}`);
+    } catch (error: any) {
+      console.error('Error updating task status:', error);
+      toast.error("Failed to update task");
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+      
+      if (error) throw error;
+      
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        project_id: id,
+        user_name: user?.userName || 'Unknown user',
+        action: 'deleted a task'
+      });
+      
+      // Update local state
+      setTasks(prev => prev.filter(task => task.id !== taskId));
+      
+      // Update task statistics in project
+      if (project) {
+        const deletedTask = tasks.find(t => t.id === taskId);
+        const wasCompleted = deletedTask?.status === 'completed';
+        
+        const newTotal = project.tasks.total - 1;
+        const newCompleted = wasCompleted ? project.tasks.completed - 1 : project.tasks.completed;
+        const newProgress = newTotal > 0 ? Math.round((newCompleted / newTotal) * 100) : 0;
+        
+        setProject({
+          ...project,
+          progress: newProgress,
+          tasks: {
+            total: newTotal,
+            completed: newCompleted
+          }
+        });
+        
+        // Update project progress in database
+        await supabase
+          .from('projects')
+          .update({ progress: newProgress })
+          .eq('id', id);
+      }
+      
+      toast.success("Task deleted successfully");
+      setShowDeleteTaskDialog(null);
+    } catch (error: any) {
+      console.error('Error deleting task:', error);
+      toast.error("Failed to delete task");
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      // Get the member's name before deletion for the activity log
+      const memberToRemove = project?.team.find(m => m.id === memberId);
+      
+      const { error } = await supabase
+        .from('team_members')
+        .delete()
+        .eq('id', memberId);
+      
+      if (error) throw error;
+      
+      // Log activity
+      if (memberToRemove) {
+        await supabase.from('activity_logs').insert({
+          project_id: id,
+          user_name: user?.userName || 'Unknown user',
+          action: `removed ${memberToRemove.name} from the team`
+        });
+      }
+      
+      // Update local state
+      if (project) {
+        setProject({
+          ...project,
+          team: project.team.filter(member => member.id !== memberId)
+        });
+      }
+      
+      toast.success("Team member removed successfully");
+      setShowRemoveMemberDialog(null);
+    } catch (error: any) {
+      console.error('Error removing team member:', error);
+      toast.error("Failed to remove team member");
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      
+      // Check if current user is the project creator
+      if (project?.created_by !== user?.id) {
+        toast.error("Only the project creator can delete this project");
+        return;
+      }
+      
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      toast.success("Project deleted successfully");
+      navigate("/projects");
+    } catch (error: any) {
+      console.error('Error deleting project:', error);
+      toast.error(error.message || "Failed to delete project");
     } finally {
       setLoading(false);
     }
@@ -254,39 +451,6 @@ const ProjectDetails = () => {
         return <Badge variant="secondary" className="uppercase text-[10px]">Low</Badge>;
       default:
         return <Badge variant="outline" className="uppercase text-[10px]">{priority}</Badge>;
-    }
-  };
-
-  const handleAddTask = () => {
-    toast.success("Task creation would open a form here");
-  };
-
-  const handleDeleteProject = async () => {
-    if (!id) return;
-    
-    try {
-      setLoading(true);
-      
-      // Check if current user is the project creator
-      if (project?.created_by !== user?.id) {
-        toast.error("Only the project creator can delete this project");
-        return;
-      }
-      
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      toast.success("Project deleted successfully");
-      navigate("/projects");
-    } catch (error: any) {
-      console.error('Error deleting project:', error);
-      toast.error(error.message || "Failed to delete project");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -464,9 +628,13 @@ const ProjectDetails = () => {
                             {task.description || "No description provided."}
                           </p>
                           <div className="flex items-center mt-2 text-xs text-muted-foreground">
-                            <span className="mr-3">Assigned to: {task.assignee}</span>
-                            <Calendar className="mr-1 h-3 w-3" />
-                            <span>Due: {formatDate(task.due_date)}</span>
+                            <span className="mr-3">Assigned to: {task.assignee || "Unassigned"}</span>
+                            {task.due_date && (
+                              <>
+                                <Calendar className="mr-1 h-3 w-3" />
+                                <span>Due: {formatDate(task.due_date)}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -484,7 +652,7 @@ const ProjectDetails = () => {
         <TabsContent value="tasks" className="animate-fade-in">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold">Tasks</h2>
-            <Button onClick={handleAddTask}>
+            <Button onClick={() => setShowAddTaskDialog(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Add Task
             </Button>
@@ -501,9 +669,15 @@ const ProjectDetails = () => {
                           <div className="flex items-center gap-3">
                             <div className="flex-shrink-0">
                               {task.status === "completed" ? (
-                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                <CheckCircle2 
+                                  className="h-5 w-5 text-green-500 cursor-pointer" 
+                                  onClick={() => handleTaskStatusChange(task.id, "to-do")}
+                                />
                               ) : (
-                                <div className="h-5 w-5 rounded-full border-2 border-muted" />
+                                <div 
+                                  className="h-5 w-5 rounded-full border-2 border-muted cursor-pointer hover:bg-muted/20" 
+                                  onClick={() => handleTaskStatusChange(task.id, "completed")}
+                                />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -511,13 +685,20 @@ const ProjectDetails = () => {
                                 <h3 className={`font-medium ${task.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
                                   {task.title}
                                 </h3>
-                                <div className="flex items-center gap-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7">
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                <div className="flex items-center gap-2 ml-4">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => setShowDeleteTaskDialog(task.id)}>
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
                               </div>
                               <p className="text-sm text-muted-foreground mt-1">
@@ -525,12 +706,14 @@ const ProjectDetails = () => {
                               </p>
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
                                 <div className="flex items-center text-xs text-muted-foreground">
-                                  <span>Assigned to: {task.assignee}</span>
+                                  <span>Assigned to: {task.assignee || "Unassigned"}</span>
                                 </div>
-                                <div className="flex items-center text-xs text-muted-foreground">
-                                  <Calendar className="mr-1 h-3 w-3" />
-                                  <span>Due: {formatDate(task.due_date)}</span>
-                                </div>
+                                {task.due_date && (
+                                  <div className="flex items-center text-xs text-muted-foreground">
+                                    <Calendar className="mr-1 h-3 w-3" />
+                                    <span>Due: {formatDate(task.due_date)}</span>
+                                  </div>
+                                )}
                                 <div className="flex gap-2">
                                   {getStatusBadge(task.status)}
                                   {getPriorityBadge(task.priority)}
@@ -551,7 +734,7 @@ const ProjectDetails = () => {
                   </div>
                   <h3 className="font-medium text-lg mb-1">No tasks yet</h3>
                   <p className="text-muted-foreground mb-4">Get started by creating your first task</p>
-                  <Button onClick={handleAddTask}>
+                  <Button onClick={() => setShowAddTaskDialog(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Add Task
                   </Button>
@@ -565,7 +748,7 @@ const ProjectDetails = () => {
         <TabsContent value="team" className="animate-fade-in">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold">Team Members</h2>
-            <Button>
+            <Button onClick={() => setShowAddMemberDialog(true)}>
               <UserPlus className="mr-2 h-4 w-4" />
               Add Member
             </Button>
@@ -588,16 +771,19 @@ const ProjectDetails = () => {
                             <p className="text-sm text-muted-foreground">{member.role}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="sm">
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit Role
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-destructive">
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Remove
-                          </Button>
-                        </div>
+                        {member.name !== user?.userName && (
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-destructive"
+                              onClick={() => setShowRemoveMemberDialog(member.id)}
+                            >
+                              <XCircle className="mr-2 h-4 w-4" />
+                              Remove
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       {member !== project.team[project.team.length - 1] && <Separator className="mt-4" />}
                     </div>
@@ -643,6 +829,108 @@ const ProjectDetails = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add Task Dialog */}
+      <Dialog open={showAddTaskDialog} onOpenChange={setShowAddTaskDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Task</DialogTitle>
+            <DialogDescription>
+              Create a new task for this project.
+            </DialogDescription>
+          </DialogHeader>
+          {id && (
+            <TaskForm 
+              projectId={id}
+              onSuccess={() => {
+                setShowAddTaskDialog(false);
+                fetchProjectData(id);
+              }}
+              onCancel={() => setShowAddTaskDialog(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Member Dialog */}
+      <Dialog open={showAddMemberDialog} onOpenChange={setShowAddMemberDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Team Member</DialogTitle>
+            <DialogDescription>
+              Add a new member to this project.
+            </DialogDescription>
+          </DialogHeader>
+          {id && (
+            <TeamMemberForm 
+              projectId={id}
+              onSuccess={() => {
+                setShowAddMemberDialog(false);
+                fetchProjectData(id);
+              }}
+              onCancel={() => setShowAddMemberDialog(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Task Confirmation Dialog */}
+      <Dialog 
+        open={!!showDeleteTaskDialog} 
+        onOpenChange={(open) => !open && setShowDeleteTaskDialog(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this task? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteTaskDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => showDeleteTaskDialog && handleDeleteTask(showDeleteTaskDialog)}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Member Confirmation Dialog */}
+      <Dialog 
+        open={!!showRemoveMemberDialog} 
+        onOpenChange={(open) => !open && setShowRemoveMemberDialog(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Remove</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove this team member from the project?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowRemoveMemberDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => showRemoveMemberDialog && handleRemoveMember(showRemoveMemberDialog)}
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
