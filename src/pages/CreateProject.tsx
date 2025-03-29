@@ -37,6 +37,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const CreateProject = () => {
   const navigate = useNavigate();
@@ -107,7 +108,7 @@ const CreateProject = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate form data
@@ -134,12 +135,57 @@ const CreateProject = () => {
     // Submit form
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Insert project
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          title: formData.title,
+          description: formData.description,
+          start_date: formData.startDate?.toISOString(),
+          due_date: formData.dueDate?.toISOString(),
+          status: formData.status,
+          priority: formData.priority,
+          progress: 0,
+          created_by: user?.id
+        })
+        .select()
+        .single();
+
+      if (projectError) {
+        throw projectError;
+      }
+
+      // Add team members
+      const teamMembers = formData.assignedUsers.map(userName => ({
+        project_id: project.id,
+        user_name: userName,
+        role: userName === user?.userName ? 'Project Manager' : 'Team Member'
+      }));
+
+      const { error: teamError } = await supabase
+        .from('team_members')
+        .insert(teamMembers);
+
+      if (teamError) {
+        throw teamError;
+      }
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        project_id: project.id,
+        user_name: user?.userName || 'Unknown user',
+        action: 'created the project'
+      });
+
       toast.success("Project created successfully");
+      navigate(`/projects/${project.id}`);
+    } catch (error: any) {
+      console.error('Error creating project:', error);
+      toast.error(error.message || "Failed to create project");
+    } finally {
       setIsSubmitting(false);
-      navigate("/projects");
-    }, 1000);
+    }
   };
 
   return (

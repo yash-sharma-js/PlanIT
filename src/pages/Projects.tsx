@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -25,121 +24,102 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
-// Sample project data
-const MOCK_PROJECTS = [
-  {
-    id: "1",
-    title: "Marketing Website Redesign",
-    description: "Complete overhaul of the company marketing website with new branding and improved user experience.",
-    startDate: "2023-09-15",
-    dueDate: "2023-11-30",
-    status: "in-progress",
-    priority: "high",
-    progress: 65,
-    tasks: {
-      total: 24,
-      completed: 16,
-    },
-    team: ["John Doe", "Jane Smith", "Robert Johnson"],
-  },
-  {
-    id: "2",
-    title: "Mobile App Development",
-    description: "Develop a cross-platform mobile app for customer engagement with personalized experiences.",
-    startDate: "2023-08-01",
-    dueDate: "2023-12-15",
-    status: "in-progress",
-    priority: "medium",
-    progress: 30,
-    tasks: {
-      total: 36,
-      completed: 11,
-    },
-    team: ["Alice Williams", "David Brown", "Emily Davis"],
-  },
-  {
-    id: "3",
-    title: "API Gateway Project",
-    description: "Implement a new API gateway to streamline communication between microservices.",
-    startDate: "2023-10-01",
-    dueDate: "2023-12-01",
-    status: "planning",
-    priority: "medium",
-    progress: 10,
-    tasks: {
-      total: 18,
-      completed: 2,
-    },
-    team: ["Michael Wilson", "Sarah Miller"],
-  },
-  {
-    id: "4",
-    title: "Customer Portal Upgrade",
-    description: "Enhance the customer portal with advanced analytics and reporting capabilities.",
-    startDate: "2023-09-20",
-    dueDate: "2024-01-15",
-    status: "in-progress",
-    priority: "high",
-    progress: 25,
-    tasks: {
-      total: 30,
-      completed: 8,
-    },
-    team: ["Thomas Anderson", "Lisa Taylor", "James Martin"],
-  },
-  {
-    id: "5",
-    title: "Internal Documentation System",
-    description: "Create a comprehensive internal documentation system for better knowledge sharing.",
-    startDate: "2023-10-10",
-    dueDate: "2023-11-15",
-    status: "completed",
-    priority: "low",
-    progress: 100,
-    tasks: {
-      total: 12,
-      completed: 12,
-    },
-    team: ["Patricia White", "Richard Lee"],
-  },
-  {
-    id: "6",
-    title: "Security Compliance Audit",
-    description: "Conduct a thorough security audit to ensure compliance with industry standards.",
-    startDate: "2023-10-05",
-    dueDate: "2023-10-25",
-    status: "planning",
-    priority: "high",
-    progress: 5,
-    tasks: {
-      total: 15,
-      completed: 0,
-    },
-    team: ["Daniel Clark", "Jennifer Lewis"],
-  },
-];
+interface Project {
+  id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  due_date: string;
+  status: string;
+  priority: string;
+  progress: number;
+  team: string[];
+  tasks: {
+    total: number;
+    completed: number;
+  };
+}
 
 const Projects = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [projects, setProjects] = useState<typeof MOCK_PROJECTS>([]);
-  const [filteredProjects, setFilteredProjects] = useState<typeof MOCK_PROJECTS>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate loading from API
-    const timer = setTimeout(() => {
-      setProjects(MOCK_PROJECTS);
-      setFilteredProjects(MOCK_PROJECTS);
-      setLoading(false);
-    }, 500);
+    fetchProjects();
+  }, [user]);
 
-    return () => clearTimeout(timer);
-  }, []);
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch projects
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('*');
+      
+      if (projectsError) {
+        toast.error("Error loading projects");
+        console.error('Error fetching projects:', projectsError);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch tasks counts for each project
+      const projectsWithDetails = await Promise.all(
+        projectsData.map(async (project) => {
+          // Fetch team members
+          const { data: teamMembers, error: teamError } = await supabase
+            .from('team_members')
+            .select('user_name')
+            .eq('project_id', project.id);
+
+          if (teamError) {
+            console.error('Error fetching team members:', teamError);
+          }
+
+          // Count tasks
+          const { data: tasksData, error: tasksError } = await supabase
+            .from('tasks')
+            .select('status')
+            .eq('project_id', project.id);
+
+          if (tasksError) {
+            console.error('Error fetching tasks:', tasksError);
+          }
+
+          const totalTasks = tasksData?.length || 0;
+          const completedTasks = tasksData?.filter(task => task.status === 'completed')?.length || 0;
+          
+          return {
+            ...project,
+            team: teamMembers?.map(member => member.user_name) || [],
+            tasks: {
+              total: totalTasks,
+              completed: completedTasks
+            }
+          };
+        })
+      );
+
+      setProjects(projectsWithDetails);
+      setFilteredProjects(projectsWithDetails);
+    } catch (error) {
+      console.error('Error in fetchProjects:', error);
+      toast.error("Failed to load projects");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let result = [...projects];
@@ -149,7 +129,7 @@ const Projects = () => {
       result = result.filter(
         project =>
           project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          project.description.toLowerCase().includes(searchQuery.toLowerCase())
+          (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
 
@@ -173,10 +153,10 @@ const Projects = () => {
           result.sort((a, b) => b.title.localeCompare(a.title));
           break;
         case "date-asc":
-          result.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+          result.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
           break;
         case "date-desc":
-          result.sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
+          result.sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime());
           break;
         case "progress-asc":
           result.sort((a, b) => a.progress - b.progress);
@@ -285,7 +265,7 @@ const Projects = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -485,7 +465,7 @@ const Projects = () => {
                     </div>
                     <div className="flex items-center">
                       <Calendar className="mr-1 h-4 w-4" />
-                      <span>{formatDate(project.dueDate)}</span>
+                      <span>{formatDate(project.due_date)}</span>
                     </div>
                   </div>
                 </div>

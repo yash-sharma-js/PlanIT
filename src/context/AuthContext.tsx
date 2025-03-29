@@ -1,6 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 // Define user type
 export interface User {
@@ -29,110 +31,162 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {},
 });
 
-// Sample users data (for demo purposes)
-const DEMO_USERS = [
-  {
-    id: "1",
-    email: "user@example.com",
-    password: "password",
-    name: "Demo User",
-    userName: "demouser",
-    avatar: "",
-  },
-];
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
 
-  // Check if user is already logged in (from localStorage)
+  // Initialize auth state
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        console.error("Failed to parse stored user data", error);
-        localStorage.removeItem("user");
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        
+        if (session?.user) {
+          // Get user profile from database
+          setTimeout(async () => {
+            const { data, error } = await supabase
+              .from('user_profiles')
+              .select('name, user_name, avatar')
+              .eq('id', session.user.id)
+              .single();
+
+            if (error) {
+              console.error('Error fetching user profile:', error);
+              return;
+            }
+
+            if (data) {
+              setUser({
+                id: session.user.id,
+                email: session.user.email || '',
+                name: data.name || '',
+                userName: data.user_name || '',
+                avatar: data.avatar || '',
+              });
+            }
+          }, 0);
+        } else {
+          setUser(null);
+        }
       }
-    }
-    setLoading(false);
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      
+      if (session?.user) {
+        // Get user profile from database
+        supabase
+          .from('user_profiles')
+          .select('name, user_name, avatar')
+          .eq('id', session.user.id)
+          .single()
+          .then(({ data, error }) => {
+            if (error) {
+              console.error('Error fetching user profile:', error);
+              setLoading(false);
+              return;
+            }
+
+            if (data) {
+              setUser({
+                id: session.user.id,
+                email: session.user.email || '',
+                name: data.name || '',
+                userName: data.user_name || '',
+                avatar: data.avatar || '',
+              });
+            }
+            setLoading(false);
+          });
+      } else {
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Login function
   const login = async (email: string, password: string) => {
-    setLoading(true);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Find user
-    const foundUser = DEMO_USERS.find(u => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      // Remove password from user object before storing
-      const { password, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
+    try {
+      setLoading(true);
       
-      // Store user in localStorage
-      localStorage.setItem("user", JSON.stringify(userWithoutPassword));
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        toast.error(error.message);
+        throw error;
+      }
       
       toast.success("Logged in successfully");
-    } else {
-      toast.error("Invalid email or password");
-      throw new Error("Invalid email or password");
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   // Register function
   const register = async (name: string, email: string, password: string, userName: string) => {
-    setLoading(true);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Check if user already exists
-    if (DEMO_USERS.some(u => u.email === email)) {
-      toast.error("User with this email already exists");
+    try {
+      setLoading(true);
+      
+      // Check if username already exists
+      const { data: existingUsers, error: checkError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('user_name', userName);
+      
+      if (checkError) {
+        toast.error("Error checking username");
+        throw checkError;
+      }
+      
+      if (existingUsers && existingUsers.length > 0) {
+        toast.error("Username already taken");
+        throw new Error("Username already taken");
+      }
+      
+      // Create new user
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            userName,
+          },
+        },
+      });
+      
+      if (error) {
+        toast.error(error.message);
+        throw error;
+      }
+      
+      toast.success("Account created successfully");
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    } finally {
       setLoading(false);
-      throw new Error("User with this email already exists");
     }
-    
-    // Check if username already exists
-    if (DEMO_USERS.some(u => u.userName === userName)) {
-      toast.error("Username already taken");
-      setLoading(false);
-      throw new Error("Username already taken");
-    }
-    
-    // Create new user (in a real app, this would be an API call)
-    const newUser = {
-      id: `${DEMO_USERS.length + 1}`,
-      email,
-      password,
-      name,
-      userName,
-      avatar: "", 
-    };
-    
-    // Add to demo users (this is just for demo, in real app we'd store in database)
-    DEMO_USERS.push(newUser);
-    
-    // Set and store user (without password)
-    const { password: _, ...userWithoutPassword } = newUser;
-    setUser(userWithoutPassword);
-    localStorage.setItem("user", JSON.stringify(userWithoutPassword));
-    
-    toast.success("Account created successfully");
-    setLoading(false);
   };
 
   // Logout function
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("user");
     toast.success("Logged out successfully");
   };
 

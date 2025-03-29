@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
@@ -29,142 +28,170 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/context/AuthContext";
 
-// Mock data - in a real app, we would fetch this from an API
-const MOCK_PROJECT = {
-  id: "1",
-  title: "Marketing Website Redesign",
-  description: "Complete overhaul of the company marketing website with new branding and improved user experience. The project will focus on modern design principles, performance optimization, and better conversion rates.",
-  startDate: "2023-09-15",
-  dueDate: "2023-11-30",
-  status: "in-progress",
-  priority: "high",
-  progress: 65,
+interface ProjectData {
+  id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  due_date: string;
+  status: string;
+  priority: string;
+  progress: number;
+  created_by: string | null;
+  team: TeamMember[];
   tasks: {
-    total: 24,
-    completed: 16,
-  },
-  team: [
-    { id: "user1", name: "John Doe", role: "Project Manager", avatar: "" },
-    { id: "user2", name: "Jane Smith", role: "UX Designer", avatar: "" },
-    { id: "user3", name: "Robert Johnson", role: "Frontend Developer", avatar: "" },
-    { id: "user4", name: "Emily Davis", role: "Content Writer", avatar: "" },
-  ],
-};
+    total: number;
+    completed: number;
+  };
+}
 
-const MOCK_TASKS = [
-  {
-    id: "task1",
-    title: "Create wireframes for homepage",
-    description: "Design low-fidelity wireframes for the new homepage layout",
-    assignee: "Jane Smith",
-    dueDate: "2023-10-10",
-    status: "completed",
-    priority: "high",
-  },
-  {
-    id: "task2",
-    title: "Develop responsive navigation component",
-    description: "Implement the responsive navigation menu with mobile support",
-    assignee: "Robert Johnson",
-    dueDate: "2023-10-20",
-    status: "in-progress",
-    priority: "high",
-  },
-  {
-    id: "task3",
-    title: "Write product description copy",
-    description: "Create compelling copy for the product sections",
-    assignee: "Emily Davis",
-    dueDate: "2023-10-15",
-    status: "in-progress",
-    priority: "medium",
-  },
-  {
-    id: "task4",
-    title: "Set up analytics tracking",
-    description: "Implement Google Analytics and conversion tracking",
-    assignee: "John Doe",
-    dueDate: "2023-11-05",
-    status: "to-do",
-    priority: "medium",
-  },
-  {
-    id: "task5",
-    title: "SEO optimization",
-    description: "Optimize meta tags and content for search engines",
-    assignee: "Emily Davis",
-    dueDate: "2023-11-10",
-    status: "to-do",
-    priority: "high",
-  },
-];
+interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  avatar: string | null;
+}
 
-const MOCK_ACTIVITIES = [
-  {
-    id: "act1",
-    user: "John Doe",
-    action: "created the project",
-    date: "2023-09-15T10:30:00Z",
-  },
-  {
-    id: "act2",
-    user: "John Doe",
-    action: "added Jane Smith to the project",
-    date: "2023-09-15T11:15:00Z",
-  },
-  {
-    id: "act3",
-    user: "Jane Smith",
-    action: "created task 'Create wireframes for homepage'",
-    date: "2023-09-16T09:45:00Z",
-  },
-  {
-    id: "act4",
-    user: "Robert Johnson",
-    action: "joined the project",
-    date: "2023-09-18T14:20:00Z",
-  },
-  {
-    id: "act5",
-    user: "Jane Smith",
-    action: "completed task 'Create wireframes for homepage'",
-    date: "2023-10-02T16:30:00Z",
-  },
-  {
-    id: "act6",
-    user: "John Doe",
-    action: "updated the project due date to Nov 30",
-    date: "2023-10-05T11:00:00Z",
-  },
-  {
-    id: "act7",
-    user: "Emily Davis",
-    action: "joined the project",
-    date: "2023-10-08T09:15:00Z",
-  },
-];
+interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  assignee: string;
+  due_date: string;
+  status: string;
+  priority: string;
+}
+
+interface ActivityLog {
+  id: string;
+  user: string;
+  action: string;
+  date: string;
+}
 
 const ProjectDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [project, setProject] = useState<typeof MOCK_PROJECT | null>(null);
-  const [tasks, setTasks] = useState<typeof MOCK_TASKS>([]);
-  const [activities, setActivities] = useState<typeof MOCK_ACTIVITIES>([]);
+  const [project, setProject] = useState<ProjectData | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
-    // In a real app, we would fetch the project data from an API
-    const timer = setTimeout(() => {
-      setProject(MOCK_PROJECT);
-      setTasks(MOCK_TASKS);
-      setActivities(MOCK_ACTIVITIES);
-      setLoading(false);
-    }, 500);
-
-    return () => clearTimeout(timer);
+    if (id) {
+      fetchProjectData(id);
+    }
   }, [id]);
+
+  const fetchProjectData = async (projectId: string) => {
+    try {
+      setLoading(true);
+      
+      // Fetch project
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .single();
+      
+      if (projectError) {
+        console.error('Error fetching project:', projectError);
+        toast.error("Error loading project");
+        setLoading(false);
+        return;
+      }
+
+      if (!projectData) {
+        setLoading(false);
+        return;
+      }
+
+      // Fetch team members
+      const { data: teamMembers, error: teamError } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('project_id', projectId);
+      
+      if (teamError) {
+        console.error('Error fetching team members:', teamError);
+      }
+
+      // Fetch tasks
+      const { data: tasksData, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('project_id', projectId);
+      
+      if (tasksError) {
+        console.error('Error fetching tasks:', tasksError);
+      }
+
+      // Fetch activities
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+      
+      if (activitiesError) {
+        console.error('Error fetching activities:', activitiesError);
+      }
+
+      // Prepare task data
+      const formattedTasks = tasksData?.map(task => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        assignee: task.assignee,
+        due_date: task.due_date,
+        status: task.status,
+        priority: task.priority
+      })) || [];
+
+      // Prepare team data
+      const formattedTeam = teamMembers?.map(member => ({
+        id: member.id,
+        name: member.user_name,
+        role: member.role || 'Team Member',
+        avatar: null
+      })) || [];
+
+      // Prepare activity logs
+      const formattedActivities = activitiesData?.map(activity => ({
+        id: activity.id,
+        user: activity.user_name,
+        action: activity.action,
+        date: activity.created_at
+      })) || [];
+
+      // Calculate tasks statistics
+      const totalTasks = formattedTasks.length;
+      const completedTasks = formattedTasks.filter(task => task.status === 'completed').length;
+      
+      // Set project with related data
+      setProject({
+        ...projectData,
+        team: formattedTeam,
+        tasks: {
+          total: totalTasks,
+          completed: completedTasks
+        }
+      });
+      
+      setTasks(formattedTasks);
+      setActivities(formattedActivities);
+    } catch (error) {
+      console.error('Error in fetchProjectData:', error);
+      toast.error("Failed to load project details");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = { 
@@ -234,9 +261,33 @@ const ProjectDetails = () => {
     toast.success("Task creation would open a form here");
   };
 
-  const handleDeleteProject = () => {
-    toast.error("This would delete the project in a real app");
-    navigate("/projects");
+  const handleDeleteProject = async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      
+      // Check if current user is the project creator
+      if (project?.created_by !== user?.id) {
+        toast.error("Only the project creator can delete this project");
+        return;
+      }
+      
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      toast.success("Project deleted successfully");
+      navigate("/projects");
+    } catch (error: any) {
+      console.error('Error deleting project:', error);
+      toast.error(error.message || "Failed to delete project");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -329,7 +380,7 @@ const ProjectDetails = () => {
                 <CardTitle>Description</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{project.description}</p>
+                <p className="text-muted-foreground">{project.description || "No description provided."}</p>
               </CardContent>
             </Card>
 
@@ -351,7 +402,7 @@ const ProjectDetails = () => {
                     <span className="text-sm font-medium">Timeline</span>
                     <div className="flex items-center text-sm">
                       <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-                      {formatDate(project.startDate)} - {formatDate(project.dueDate)}
+                      {formatDate(project.start_date)} - {formatDate(project.due_date)}
                     </div>
                   </div>
                 </div>
@@ -380,7 +431,9 @@ const ProjectDetails = () => {
                       </div>
                     </div>
                     <div className="text-4xl font-bold text-muted-foreground">
-                      {Math.round((project.tasks.completed / project.tasks.total) * 100)}%
+                      {project.tasks.total > 0 
+                        ? Math.round((project.tasks.completed / project.tasks.total) * 100)
+                        : 0}%
                     </div>
                   </div>
                 </div>
@@ -394,29 +447,33 @@ const ProjectDetails = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {tasks.slice(0, 3).map((task) => (
-                    <div key={task.id} className="flex items-start space-x-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <h3 className="truncate font-medium leading-none">
-                            {task.title}
-                          </h3>
-                          <div className="flex items-center gap-2 ml-4">
-                            {getStatusBadge(task.status)}
-                            {getPriorityBadge(task.priority)}
+                  {tasks.length > 0 ? (
+                    tasks.slice(0, 3).map((task) => (
+                      <div key={task.id} className="flex items-start space-x-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <h3 className="truncate font-medium leading-none">
+                              {task.title}
+                            </h3>
+                            <div className="flex items-center gap-2 ml-4">
+                              {getStatusBadge(task.status)}
+                              {getPriorityBadge(task.priority)}
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                            {task.description || "No description provided."}
+                          </p>
+                          <div className="flex items-center mt-2 text-xs text-muted-foreground">
+                            <span className="mr-3">Assigned to: {task.assignee}</span>
+                            <Calendar className="mr-1 h-3 w-3" />
+                            <span>Due: {formatDate(task.due_date)}</span>
                           </div>
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                          {task.description}
-                        </p>
-                        <div className="flex items-center mt-2 text-xs text-muted-foreground">
-                          <span className="mr-3">Assigned to: {task.assignee}</span>
-                          <Calendar className="mr-1 h-3 w-3" />
-                          <span>Due: {formatDate(task.dueDate)}</span>
-                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground">No tasks created yet.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -464,7 +521,7 @@ const ProjectDetails = () => {
                                 </div>
                               </div>
                               <p className="text-sm text-muted-foreground mt-1">
-                                {task.description}
+                                {task.description || "No description provided."}
                               </p>
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
                                 <div className="flex items-center text-xs text-muted-foreground">
@@ -472,7 +529,7 @@ const ProjectDetails = () => {
                                 </div>
                                 <div className="flex items-center text-xs text-muted-foreground">
                                   <Calendar className="mr-1 h-3 w-3" />
-                                  <span>Due: {formatDate(task.dueDate)}</span>
+                                  <span>Due: {formatDate(task.due_date)}</span>
                                 </div>
                                 <div className="flex gap-2">
                                   {getStatusBadge(task.status)}
@@ -517,33 +574,37 @@ const ProjectDetails = () => {
           <Card className="glass-panel">
             <CardContent className="py-6">
               <div className="space-y-6">
-                {project.team.map((member) => (
-                  <div key={member.id} className="group">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={member.avatar} alt={member.name} />
-                          <AvatarFallback>{member.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h3 className="font-medium">{member.name}</h3>
-                          <p className="text-sm text-muted-foreground">{member.role}</p>
+                {project.team.length > 0 ? (
+                  project.team.map((member) => (
+                    <div key={member.id} className="group">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={member.avatar || undefined} alt={member.name} />
+                            <AvatarFallback>{member.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <h3 className="font-medium">{member.name}</h3>
+                            <p className="text-sm text-muted-foreground">{member.role}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="sm">
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Role
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-destructive">
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Remove
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="sm">
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Role
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-destructive">
-                          <XCircle className="mr-2 h-4 w-4" />
-                          Remove
-                        </Button>
-                      </div>
+                      {member !== project.team[project.team.length - 1] && <Separator className="mt-4" />}
                     </div>
-                    {member !== project.team[project.team.length - 1] && <Separator className="mt-4" />}
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-muted-foreground text-center">No team members added yet.</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -557,23 +618,27 @@ const ProjectDetails = () => {
               <CardDescription>History of activities and changes</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-8 relative before:absolute before:inset-0 before:left-4 before:w-0.5 before:bg-border">
-                {activities.map((activity, index) => (
-                  <div key={activity.id} className="flex gap-4 relative">
-                    <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center z-10">
-                      <span className="h-3 w-3 rounded-full bg-primary"></span>
+              {activities.length > 0 ? (
+                <div className="space-y-8 relative before:absolute before:inset-0 before:left-4 before:w-0.5 before:bg-border">
+                  {activities.map((activity, index) => (
+                    <div key={activity.id} className="flex gap-4 relative">
+                      <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center z-10">
+                        <span className="h-3 w-3 rounded-full bg-primary"></span>
+                      </div>
+                      <div className={`flex-1 flex flex-col space-y-1 pt-1 ${index === 0 ? 'animate-fade-in' : ''}`}>
+                        <p className="font-medium">
+                          <span className="text-primary">{activity.user}</span> {activity.action}
+                        </p>
+                        <span className="text-sm text-muted-foreground">
+                          {formatDateTime(activity.date)}
+                        </span>
+                      </div>
                     </div>
-                    <div className={`flex-1 flex flex-col space-y-1 pt-1 ${index === 0 ? 'animate-fade-in' : ''}`}>
-                      <p className="font-medium">
-                        <span className="text-primary">{activity.user}</span> {activity.action}
-                      </p>
-                      <span className="text-sm text-muted-foreground">
-                        {formatDateTime(activity.date)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-6">No activity recorded yet.</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
