@@ -189,14 +189,11 @@ const PendingTasks = () => {
               </CardContent>
               <CardFooter className="pt-2">
                 <div className="flex justify-between w-full">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    as={Link}
-                    to={`/projects/${task.project_id}`}
-                  >
-                    Details
-                  </Button>
+                  <Link to={`/projects/${task.project_id}`}>
+                    <Button variant="outline" size="sm">
+                      Details
+                    </Button>
+                  </Link>
                   <Button 
                     size="sm"
                     onClick={() => markTaskComplete(task.id)}
