@@ -16,6 +16,7 @@ import CreateProject from "./pages/CreateProject";
 import NotFound from "./pages/NotFound";
 import Profile from "./pages/Profile";
 import Meetings from "./pages/Meetings";
+import PendingTasks from "./pages/PendingTasks"; // Add the new page
 
 // Layout
 import AuthLayout from "./components/layouts/AuthLayout";
@@ -63,6 +64,7 @@ const AppRoutes = () => {
         <Route path="/projects/:id" element={<ProjectDetails />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/meetings" element={<Meetings />} />
+        <Route path="/pending-tasks" element={<PendingTasks />} /> {/* Add the new route */}
       </Route>
 
       {/* 404 */}

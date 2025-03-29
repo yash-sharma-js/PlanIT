@@ -31,20 +31,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-
-// Mock users for assignment
-const MOCK_USERS = [
-  { id: "1", name: "Demo User", userName: "demouser" },
-  { id: "2", name: "John Doe", userName: "johndoe" },
-  { id: "3", name: "Jane Smith", userName: "janesmith" },
-  { id: "4", name: "Alex Johnson", userName: "alexj" },
-];
 
 const CreateProject = () => {
   const navigate = useNavigate();
@@ -58,13 +49,10 @@ const CreateProject = () => {
     priority: "medium",
     assignedUsers: [] as string[]
   });
-  const [availableUsers, setAvailableUsers] = useState<typeof MOCK_USERS>([]);
+  const [newUserName, setNewUserName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Simulate fetching users
-    setAvailableUsers(MOCK_USERS);
-    
     // Auto-assign current user
     if (user?.userName) {
       setFormData(prev => ({
@@ -87,27 +75,35 @@ const CreateProject = () => {
     setFormData(prev => ({ ...prev, [name]: date }));
   };
 
-  const handleUserToggle = (userName: string) => {
-    setFormData(prev => {
-      const isAssigned = prev.assignedUsers.includes(userName);
-      
-      if (isAssigned) {
-        // Don't allow removing the current user
-        if (user?.userName === userName) {
-          toast.error("You cannot remove yourself from the project");
-          return prev;
-        }
-        return {
-          ...prev,
-          assignedUsers: prev.assignedUsers.filter(u => u !== userName)
-        };
-      } else {
-        return {
-          ...prev,
-          assignedUsers: [...prev.assignedUsers, userName]
-        };
-      }
-    });
+  const handleAddUser = () => {
+    if (!newUserName.trim()) {
+      toast.error("Please enter a username");
+      return;
+    }
+
+    if (formData.assignedUsers.includes(newUserName.trim())) {
+      toast.error("This user is already assigned");
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      assignedUsers: [...prev.assignedUsers, newUserName.trim()]
+    }));
+    setNewUserName("");
+  };
+
+  const handleRemoveUser = (userName: string) => {
+    // Don't allow removing the current user
+    if (user?.userName === userName) {
+      toast.error("You cannot remove yourself from the project");
+      return;
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      assignedUsers: prev.assignedUsers.filter(u => u !== userName)
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -315,31 +311,50 @@ const CreateProject = () => {
             <div className="space-y-3">
               <Label>Assign Users <span className="text-destructive">*</span></Label>
               <div className="border rounded-md p-4">
-                <div className="flex items-center mb-2">
+                <div className="flex items-center mb-3">
                   <Users className="h-5 w-5 mr-2 text-muted-foreground" />
                   <span className="font-medium text-sm">Team Members</span>
                 </div>
-                <div className="space-y-2">
-                  {availableUsers.map((availableUser) => (
-                    <div key={availableUser.id} className="flex items-center space-x-2">
-                      <Checkbox 
-                        id={`user-${availableUser.id}`} 
-                        checked={formData.assignedUsers.includes(availableUser.userName)}
-                        onCheckedChange={() => handleUserToggle(availableUser.userName)}
-                        disabled={isSubmitting || (user?.userName === availableUser.userName)}
-                      />
-                      <label
-                        htmlFor={`user-${availableUser.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
-                      >
-                        {availableUser.name}
-                        <span className="ml-1 text-muted-foreground">(@{availableUser.userName})</span>
-                        {user?.userName === availableUser.userName && (
+                
+                {/* Display assigned users */}
+                <div className="space-y-2 mb-4">
+                  {formData.assignedUsers.map((userName) => (
+                    <div key={userName} className="flex items-center justify-between p-2 bg-secondary/50 rounded-md">
+                      <span className="text-sm font-medium">
+                        @{userName}
+                        {user?.userName === userName && (
                           <span className="ml-1 text-xs text-muted-foreground">(you)</span>
                         )}
-                      </label>
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 w-8 p-0"
+                        onClick={() => handleRemoveUser(userName)}
+                        disabled={user?.userName === userName || isSubmitting}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
                   ))}
+                </div>
+                
+                {/* Add user input */}
+                <div className="flex space-x-2">
+                  <Input
+                    placeholder="Enter username"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    disabled={isSubmitting}
+                    className="flex-1"
+                  />
+                  <Button 
+                    type="button" 
+                    onClick={handleAddUser}
+                    disabled={isSubmitting}
+                  >
+                    Add
+                  </Button>
                 </div>
               </div>
             </div>
