@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
-import { CheckSquare, Clock, AlertTriangle } from "lucide-react";
+import { CheckSquare, Clock, AlertTriangle, FolderIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Project {
@@ -49,7 +49,6 @@ const Dashboard = () => {
   const fetchUserData = async () => {
     setIsLoading(true);
     try {
-      // Get team memberships to find all projects the user is part of
       const { data: teamMemberships, error: membershipError } = await supabase
         .from('team_members')
         .select('project_id')
@@ -62,10 +61,8 @@ const Dashboard = () => {
         return;
       }
       
-      // Get all project IDs the user is part of
       const projectIds = teamMemberships.map(tm => tm.project_id);
       
-      // Fetch projects
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
@@ -75,7 +72,6 @@ const Dashboard = () => {
       if (projectsError) throw projectsError;
       setProjects(projectsData || []);
       
-      // Fetch tasks assigned to the user
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select(`
@@ -106,7 +102,6 @@ const Dashboard = () => {
       
       setTasks(formattedTasks);
       
-      // Calculate stats
       const completedTasks = (tasksData || []).filter(t => t.status === 'completed').length;
       const pendingTasks = (tasksData || []).length - completedTasks;
       const highPriorityTasks = (tasksData || []).filter(t => t.priority === 'high' && t.status !== 'completed').length;
@@ -140,8 +135,8 @@ const Dashboard = () => {
 
   const projectChartData = projects.map(project => ({
     name: project.title,
-    tasks: 5, // Replace with actual task count per project
-    meetings: 3, // Replace with actual meeting count per project
+    tasks: 5,
+    meetings: 3
   }));
 
   const taskStatusData = [
@@ -173,12 +168,11 @@ const Dashboard = () => {
         </p>
       </div>
 
-      {/* Stats Overview */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
-            <Folders className="h-4 w-4 text-muted-foreground" />
+            <FolderIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalProjects}</div>
@@ -225,7 +219,6 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Recent Tasks Section */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -288,7 +281,6 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Projects and Charts Section */}
       <Tabs defaultValue="projects" className="space-y-4">
         <TabsList>
           <TabsTrigger value="projects">Projects</TabsTrigger>

@@ -39,6 +39,7 @@ const QrCodeScanner = ({ onScan, isOpen, onClose }: QrCodeScannerProps) => {
     }
   };
 
+  // This function is now declared but used only within an event handler
   const handleError = (err: Error) => {
     setError(err.message);
     console.error("QR Scanner Error:", err);
@@ -60,9 +61,12 @@ const QrCodeScanner = ({ onScan, isOpen, onClose }: QrCodeScannerProps) => {
               constraints={{ facingMode: 'environment' }}
               scanDelay={500}
               onResult={handleScan}
-              onError={handleError}
               videoStyle={{ width: '100%', height: '100%' }}
               videoContainerStyle={{ width: '100%', height: '100%', position: 'relative' }}
+              onError={(error) => {
+                console.error("QR Scanner Error:", error);
+                setError("Failed to access camera");
+              }}
             />
           )}
           {error && (
