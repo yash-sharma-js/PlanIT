@@ -28,7 +28,7 @@ const TeamMemberForm = ({ projectId, onSuccess, onCancel }: TeamMemberFormProps)
   
   const [formData, setFormData] = useState({
     userName: "",
-    role: "Team Member"
+    role: "Viewer" // Default to Viewer role for view-only access
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,9 +41,15 @@ const TeamMemberForm = ({ projectId, onSuccess, onCancel }: TeamMemberFormProps)
   };
 
   const handleQrCodeScan = (data: string) => {
-    // Assuming the QR code contains a username
-    setFormData(prev => ({ ...prev, userName: data }));
-    toast.success(`User found: ${data}`);
+    // Extract username from QR code data (format: planit://user/username)
+    try {
+      const userName = data.split('/').pop() || '';
+      setFormData(prev => ({ ...prev, userName }));
+      toast.success(`User found: ${userName}`);
+    } catch (error) {
+      console.error('Error parsing QR code data:', data);
+      toast.error("Invalid QR code format");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,32 +75,38 @@ const TeamMemberForm = ({ projectId, onSuccess, onCancel }: TeamMemberFormProps)
       if (checkError) throw checkError;
 
       if (existingMember) {
-        toast.error("This user is already a team member");
-        setIsSubmitting(false);
-        return;
-      }
+        // Update their role instead of creating a new record
+        const { error: updateError } = await supabase
+          .from('team_members')
+          .update({ role: formData.role })
+          .eq('project_id', projectId)
+          .eq('user_name', formData.userName);
+        
+        if (updateError) throw updateError;
+        
+        toast.success("Team member role updated");
+      } else {
+        // Insert team member
+        const { error } = await supabase
+          .from('team_members')
+          .insert({
+            project_id: projectId,
+            user_name: formData.userName,
+            role: formData.role
+          });
 
-      // Insert team member
-      const { data: member, error } = await supabase
-        .from('team_members')
-        .insert({
+        if (error) throw error;
+        
+        // Log activity
+        await supabase.from('activity_logs').insert({
           project_id: projectId,
-          user_name: formData.userName,
-          role: formData.role
-        })
-        .select()
-        .single();
+          user_name: user?.userName || 'Unknown user',
+          action: `added ${formData.userName} as a ${formData.role}`
+        });
 
-      if (error) throw error;
-
-      // Log activity
-      await supabase.from('activity_logs').insert({
-        project_id: projectId,
-        user_name: user?.userName || 'Unknown user',
-        action: `added ${formData.userName} as a ${formData.role}`
-      });
-
-      toast.success("Team member added successfully");
+        toast.success("Team member added successfully");
+      }
+      
       onSuccess();
     } catch (error: any) {
       console.error('Error adding team member:', error);
@@ -142,12 +154,15 @@ const TeamMemberForm = ({ projectId, onSuccess, onCancel }: TeamMemberFormProps)
             <SelectValue placeholder="Select role" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Project Manager">Project Manager</SelectItem>
-            <SelectItem value="Team Lead">Team Lead</SelectItem>
-            <SelectItem value="Team Member">Team Member</SelectItem>
-            <SelectItem value="Observer">Observer</SelectItem>
+            <SelectItem value="Project Manager">Project Manager (Full Access)</SelectItem>
+            <SelectItem value="Editor">Editor (Can edit but not delete)</SelectItem>
+            <SelectItem value="Contributor">Contributor (Limited editing)</SelectItem>
+            <SelectItem value="Viewer">Viewer (View only)</SelectItem>
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground mt-1">
+          Viewers can only see project data without making changes
+        </p>
       </div>
 
       {/* Buttons */}

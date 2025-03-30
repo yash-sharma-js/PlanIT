@@ -25,7 +25,7 @@ const AuthLayout = () => {
       <div className="flex flex-1 items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md animate-fade-in">
           <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold mb-2">TaskSphere</h1>
+            <h1 className="text-2xl font-bold mb-2">PlanIT</h1>
             <p className="text-muted-foreground">Manage projects with elegance</p>
           </div>
           

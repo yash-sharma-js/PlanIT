@@ -7,122 +7,203 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-// Mock data for tasks
-const MOCK_TASKS = [
-  {
-    id: "1",
-    title: "Design landing page wireframes",
-    project: "Marketing Website Redesign",
-    dueDate: "2023-10-15",
-    priority: "high",
-    status: "in-progress",
-    assignedTo: "demouser"
-  },
-  {
-    id: "2",
-    title: "Implement authentication flow",
-    project: "Mobile App Development",
-    dueDate: "2023-10-18",
-    priority: "medium",
-    status: "to-do",
-    assignedTo: "demouser"
-  },
-  {
-    id: "3",
-    title: "Write API documentation",
-    project: "API Gateway Project",
-    dueDate: "2023-10-12",
-    priority: "low",
-    status: "in-progress",
-    assignedTo: "demouser"
-  },
-  {
-    id: "4",
-    title: "Test checkout process",
-    project: "E-commerce Platform",
-    dueDate: "2023-10-20",
-    priority: "high",
-    status: "to-do",
-    assignedTo: "demouser"
-  },
-];
+interface Project {
+  id: string;
+  title: string;
+  description: string | null;
+  progress: number;
+  tasks: number;
+  completedTasks: number;
+  assignedUsers: string[];
+  status: string;
+}
 
-// Mock data for meetings
-const MOCK_MEETINGS = [
-  {
-    id: "1",
-    title: "Weekly Team Standup",
-    time: "09:30 AM - 10:00 AM",
-    date: "2023-10-16",
-    participants: 8,
-  },
-  {
-    id: "2",
-    title: "Product Review",
-    time: "11:00 AM - 12:00 PM",
-    date: "2023-10-16",
-    participants: 5,
-  },
-  {
-    id: "3",
-    title: "Client Presentation",
-    time: "02:00 PM - 03:30 PM",
-    date: "2023-10-17",
-    participants: 4,
-  },
-];
+interface Task {
+  id: string;
+  title: string;
+  project: string;
+  project_id: string;
+  dueDate: string;
+  priority: string;
+  status: string;
+  assignedTo: string;
+}
 
-// Mock data for projects
-const MOCK_PROJECTS = [
-  {
-    id: "1",
-    title: "Marketing Website Redesign",
-    description: "Redesign the company marketing website with new branding",
-    progress: 65,
-    tasks: 12,
-    completedTasks: 8,
-    assignedUsers: ["demouser"]
-  },
-  {
-    id: "2",
-    title: "Mobile App Development",
-    description: "Build a cross-platform mobile app for customer engagement",
-    progress: 30,
-    tasks: 24,
-    completedTasks: 7,
-    assignedUsers: ["demouser"]
-  },
-  {
-    id: "3",
-    title: "API Gateway Project",
-    description: "Implement a new API gateway for microservices architecture",
-    progress: 80,
-    tasks: 16,
-    completedTasks: 13,
-    assignedUsers: ["demouser"]
-  },
-];
+interface Meeting {
+  id: string;
+  title: string;
+  time: string;
+  date: string;
+  participants: number;
+}
 
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<typeof MOCK_TASKS>([]);
-  const [meetings, setMeetings] = useState<typeof MOCK_MEETINGS>([]);
-  const [projects, setProjects] = useState<typeof MOCK_PROJECTS>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [stats, setStats] = useState({
+    totalProjects: 0,
+    activeTasks: 0,
+    inProgressTasks: 0,
+    upcomingMeetings: 0,
+    avgCompletion: 0
+  });
 
   useEffect(() => {
-    // Simulate loading data
-    const timer = setTimeout(() => {
-      setTasks(MOCK_TASKS);
-      setMeetings(MOCK_MEETINGS);
-      setProjects(MOCK_PROJECTS);
-      setLoading(false);
-    }, 500);
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
 
-    return () => clearTimeout(timer);
-  }, []);
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch team memberships to get projects the user is part of
+      const { data: teamMemberships, error: membershipError } = await supabase
+        .from('team_members')
+        .select('project_id')
+        .eq('user_name', user?.userName);
+      
+      if (membershipError) throw membershipError;
+      
+      if (!teamMemberships || teamMemberships.length === 0) {
+        setTasks([]);
+        setProjects([]);
+        setLoading(false);
+        return;
+      }
+      
+      const projectIds = teamMemberships.map(tm => tm.project_id);
+      
+      // Fetch projects
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('*')
+        .in('id', projectIds);
+      
+      if (projectsError) throw projectsError;
+      
+      // Fetch tasks from all projects
+      const { data: tasksData, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*, projects:project_id(title)')
+        .in('project_id', projectIds)
+        .eq('assignee', user?.userName)
+        .order('due_date', { ascending: true });
+      
+      if (tasksError) throw tasksError;
+      
+      // Format tasks
+      const formattedTasks = tasksData.map(task => ({
+        id: task.id,
+        title: task.title,
+        project: task.projects?.title || 'Unknown Project',
+        project_id: task.project_id,
+        dueDate: task.due_date,
+        priority: task.priority,
+        status: task.status,
+        assignedTo: task.assignee
+      }));
+      
+      // Limit to 4 most recent tasks for display
+      setTasks(formattedTasks.slice(0, 4));
+      
+      // Process project data to include task counts
+      const processedProjects = await Promise.all(projectsData.map(async (project) => {
+        // Count total tasks for this project
+        const { count: totalTasks, error: totalError } = await supabase
+          .from('tasks')
+          .select('*', { count: 'exact', head: true })
+          .eq('project_id', project.id);
+        
+        // Count completed tasks for this project
+        const { count: completedTasks, error: completedError } = await supabase
+          .from('tasks')
+          .select('*', { count: 'exact', head: true })
+          .eq('project_id', project.id)
+          .eq('status', 'completed');
+        
+        // Get team members for this project
+        const { data: members, error: membersError } = await supabase
+          .from('team_members')
+          .select('user_name')
+          .eq('project_id', project.id);
+        
+        if (totalError || completedError || membersError) throw new Error("Error fetching project details");
+        
+        return {
+          id: project.id,
+          title: project.title,
+          description: project.description,
+          progress: project.progress,
+          tasks: totalTasks || 0,
+          completedTasks: completedTasks || 0,
+          assignedUsers: members?.map(m => m.user_name) || [],
+          status: project.status
+        };
+      }));
+      
+      // Limit to 3 projects for display
+      setProjects(processedProjects.slice(0, 3));
+      
+      // Calculate statistics
+      const totalProjects = projectsData.length;
+      const activeTasks = formattedTasks.length;
+      const inProgressTasks = formattedTasks.filter(t => t.status === 'in-progress').length;
+      
+      // Calculate average completion percentage across all projects
+      let totalProgress = 0;
+      projectsData.forEach(p => {
+        totalProgress += p.progress;
+      });
+      const avgCompletion = projectsData.length > 0 ? Math.round(totalProgress / projectsData.length) : 0;
+      
+      setStats({
+        totalProjects,
+        activeTasks,
+        inProgressTasks,
+        upcomingMeetings: 0, // No meetings data in database yet
+        avgCompletion
+      });
+      
+      // For now, use mock meetings data until we add a meetings table
+      setMeetings([
+        {
+          id: "1",
+          title: "Weekly Team Standup",
+          time: "09:30 AM - 10:00 AM",
+          date: "2023-10-16",
+          participants: 8,
+        },
+        {
+          id: "2",
+          title: "Product Review",
+          time: "11:00 AM - 12:00 PM",
+          date: "2023-10-16",
+          participants: 5,
+        },
+        {
+          id: "3",
+          title: "Client Presentation",
+          time: "02:00 PM - 03:30 PM",
+          date: "2023-10-17",
+          participants: 4,
+        },
+      ]);
+      
+    } catch (error: any) {
+      console.error('Error fetching dashboard data:', error);
+      toast.error("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
@@ -185,9 +266,9 @@ const Dashboard = () => {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{projects.length}</div>
+            <div className="text-2xl font-bold">{stats.totalProjects}</div>
             <p className="text-xs text-muted-foreground">
-              +2 from last month
+              {stats.totalProjects > 0 ? "Active projects" : "No projects yet"}
             </p>
           </CardContent>
         </Card>
@@ -210,9 +291,9 @@ const Dashboard = () => {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{tasks.length}</div>
+            <div className="text-2xl font-bold">{stats.activeTasks}</div>
             <p className="text-xs text-muted-foreground">
-              {tasks.filter((t) => t.status === "in-progress").length} in progress
+              {stats.inProgressTasks} in progress
             </p>
           </CardContent>
         </Card>
@@ -259,9 +340,9 @@ const Dashboard = () => {
             </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">58%</div>
+            <div className="text-2xl font-bold">{stats.avgCompletion}%</div>
             <p className="text-xs text-muted-foreground">
-              +5.2% from last month
+              Project completion average
             </p>
           </CardContent>
         </Card>
@@ -273,7 +354,7 @@ const Dashboard = () => {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle>Pending Tasks</CardTitle>
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/projects")}>
+              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/pending-tasks")}>
                 View all
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
@@ -284,8 +365,8 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="pb-1">
             <div className="space-y-4">
-              {tasks.map((task) => (
-                <div key={task.id} className="flex items-start space-x-4">
+              {tasks.length > 0 ? tasks.map((task) => (
+                <div key={task.id} className="flex items-start space-x-4 p-2 rounded-md bg-card/70 hover:bg-card/90 transition-colors">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="truncate font-medium leading-none text-sm">
@@ -293,24 +374,26 @@ const Dashboard = () => {
                       </h3>
                       {getPriorityBadge(task.priority)}
                     </div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground truncate">
                       {task.project}
                     </p>
                     <div className="flex items-center pt-1 text-xs text-muted-foreground">
                       <Clock className="mr-1 h-3 w-3" />
-                      <span>{formatDate(task.dueDate)}</span>
-                      <span className="mx-1">•</span>
-                      <span>Assigned to: @{task.assignedTo}</span>
+                      <span>{task.dueDate ? formatDate(task.dueDate) : "No due date"}</span>
                     </div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="text-center p-4 text-muted-foreground">
+                  No pending tasks
+                </div>
+              )}
             </div>
           </CardContent>
           <CardFooter>
-            <Button className="w-full" onClick={() => navigate("/projects/new")}>
+            <Button className="w-full" onClick={() => navigate("/projects")}>
               <Plus className="mr-2 h-4 w-4" />
-              Add New Task
+              Manage Tasks
             </Button>
           </CardFooter>
         </Card>
@@ -332,7 +415,7 @@ const Dashboard = () => {
           <CardContent className="pb-1">
             <div className="space-y-4">
               {meetings.map((meeting) => (
-                <div key={meeting.id} className="flex items-start space-x-4">
+                <div key={meeting.id} className="flex items-start space-x-4 p-2 rounded-md bg-card/70 hover:bg-card/90 transition-colors">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center justify-between">
                       <h3 className="truncate font-medium leading-none text-sm">
@@ -376,8 +459,8 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="pb-1">
             <div className="space-y-4">
-              {projects.map((project) => (
-                <div key={project.id} className="space-y-2">
+              {projects.length > 0 ? projects.map((project) => (
+                <div key={project.id} className="space-y-2 p-2 rounded-md bg-card/70 hover:bg-card/90 transition-colors">
                   <div className="flex items-center justify-between">
                     <h3 className="font-medium truncate leading-none text-sm">
                       {project.title}
@@ -387,10 +470,14 @@ const Dashboard = () => {
                   <Progress value={project.progress} className="h-1.5" />
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>{project.completedTasks} of {project.tasks} tasks completed</span>
-                    <span>Assigned to: @{project.assignedUsers.join(', @')}</span>
+                    <span className="truncate ml-2">Status: {project.status}</span>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="text-center p-4 text-muted-foreground">
+                  No active projects
+                </div>
+              )}
             </div>
           </CardContent>
           <CardFooter>

@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ const Profile = () => {
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar || "");
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -48,7 +49,14 @@ const Profile = () => {
   };
 
   const openCamera = async () => {
+    setCameraError(null);
     try {
+      // First, check if media devices are supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Media devices API not supported in this browser");
+      }
+      
+      // Request camera access
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: "user" } 
       });
@@ -59,9 +67,10 @@ const Profile = () => {
       }
       
       setIsCameraOpen(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error accessing camera:", error);
-      toast.error("Could not access camera. Please check permissions.");
+      setCameraError(error.message || "Could not access camera. Please check permissions.");
+      toast.error("Camera access failed: " + (error.message || "Check permissions"));
     }
   };
 
@@ -71,7 +80,7 @@ const Profile = () => {
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       
-      if (context) {
+      if (context && video.readyState === video.HAVE_ENOUGH_DATA) {
         // Set canvas dimensions to match video
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -79,14 +88,21 @@ const Profile = () => {
         // Draw the current video frame to canvas
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Convert canvas to data URL and set as avatar
-        const dataUrl = canvas.toDataURL('image/png');
-        setAvatarUrl(dataUrl);
-        
-        // Close camera
-        closeCamera();
-        
-        toast.success("Photo captured successfully");
+        try {
+          // Convert canvas to data URL and set as avatar
+          const dataUrl = canvas.toDataURL('image/png');
+          setAvatarUrl(dataUrl);
+          
+          // Close camera
+          closeCamera();
+          
+          toast.success("Photo captured successfully");
+        } catch (e) {
+          console.error("Error capturing photo:", e);
+          toast.error("Failed to capture photo");
+        }
+      } else {
+        toast.error("Video stream not ready. Please try again.");
       }
     }
   };
@@ -100,6 +116,15 @@ const Profile = () => {
     
     setIsCameraOpen(false);
   };
+
+  // Ensure we clean up if the component unmounts while camera is open
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   return (
     <div className="container max-w-2xl mx-auto py-6 animate-fade-in">
@@ -187,39 +212,42 @@ const Profile = () => {
       </Card>
 
       {/* Camera Dialog */}
-      {isCameraOpen && (
-        <Dialog open={isCameraOpen} onOpenChange={(open) => !open && closeCamera()}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Take a profile picture</DialogTitle>
-              <DialogDescription>
-                Position your face in the center of the frame
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col items-center space-y-4">
-              <div className="relative overflow-hidden rounded-lg border">
+      <Dialog open={isCameraOpen} onOpenChange={(open) => !open && closeCamera()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Take a profile picture</DialogTitle>
+            <DialogDescription>
+              Position your face in the center of the frame
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative overflow-hidden rounded-lg border">
+              {cameraError ? (
+                <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
+                  <p className="font-medium">Camera access error</p>
+                  <p className="text-sm">{cameraError}</p>
+                </div>
+              ) : (
                 <video 
                   ref={videoRef} 
                   autoPlay 
                   playsInline 
                   className="h-auto w-full max-h-[300px] object-cover"
                 />
-              </div>
-              <canvas ref={canvasRef} className="hidden" />
-              <div className="flex space-x-2">
-                <DialogClose asChild>
-                  <Button variant="outline" onClick={closeCamera}>
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <Button onClick={capturePhoto}>
-                  Capture Photo
-                </Button>
-              </div>
+              )}
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+            <canvas ref={canvasRef} className="hidden" />
+            <div className="flex space-x-2">
+              <Button variant="outline" onClick={closeCamera}>
+                Cancel
+              </Button>
+              <Button onClick={capturePhoto} disabled={!!cameraError}>
+                Capture Photo
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* QR Code Dialog */}
       <Dialog open={isQrDialogOpen} onOpenChange={setIsQrDialogOpen}>
@@ -233,7 +261,7 @@ const Profile = () => {
           <div className="flex flex-col items-center space-y-4 p-4">
             <div className="bg-white p-4 rounded-lg">
               <QRCodeSVG 
-                value={`tasksphere://user/${user?.userName || user?.id}`} 
+                value={`planit://user/${user?.userName || user?.id}`} 
                 size={200} 
                 level="H"
                 includeMargin
