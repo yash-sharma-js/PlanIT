@@ -1,70 +1,55 @@
-
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Users, ChevronRight, Clock, Plus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useAppNavigation } from "@/hooks/use-navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { useAuth } from "@/context/AuthContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
+import { CheckSquare, Clock, AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface Project {
   id: string;
   title: string;
-  description: string | null;
-  progress: number;
-  tasks: number;
-  completedTasks: number;
-  assignedUsers: string[];
-  status: string;
+  description: string;
+  created_at: string;
 }
 
 interface Task {
   id: string;
   title: string;
-  project: string;
-  project_id: string;
-  dueDate: string;
   priority: string;
   status: string;
-  assignedTo: string;
-}
-
-interface Meeting {
-  id: string;
-  title: string;
-  time: string;
-  date: string;
-  participants: number;
+  due_date: string | null;
+  project_id: string;
+  project_name: string;
 }
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const navigation = useAppNavigation();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalProjects: 0,
-    activeTasks: 0,
-    inProgressTasks: 0,
-    upcomingMeetings: 0,
-    avgCompletion: 0
+    completedTasks: 0,
+    pendingTasks: 0,
+    highPriorityTasks: 0
   });
 
   useEffect(() => {
     if (user) {
-      fetchData();
+      fetchUserData();
     }
   }, [user]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchUserData = async () => {
+    setIsLoading(true);
     try {
-      // Fetch team memberships to get projects the user is part of
+      // Get team memberships to find all projects the user is part of
       const { data: teamMemberships, error: membershipError } = await supabase
         .from('team_members')
         .select('project_id')
@@ -73,421 +58,317 @@ const Dashboard = () => {
       if (membershipError) throw membershipError;
       
       if (!teamMemberships || teamMemberships.length === 0) {
-        setTasks([]);
-        setProjects([]);
-        setLoading(false);
+        setIsLoading(false);
         return;
       }
       
+      // Get all project IDs the user is part of
       const projectIds = teamMemberships.map(tm => tm.project_id);
       
       // Fetch projects
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('*')
-        .in('id', projectIds);
+        .in('id', projectIds)
+        .order('created_at', { ascending: false });
       
       if (projectsError) throw projectsError;
+      setProjects(projectsData || []);
       
-      // Fetch tasks from all projects
+      // Fetch tasks assigned to the user
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
-        .select('*, projects:project_id(title)')
+        .select(`
+          id,
+          title,
+          priority,
+          status,
+          due_date,
+          project_id,
+          projects:project_id (title)
+        `)
         .in('project_id', projectIds)
         .eq('assignee', user?.userName)
-        .order('due_date', { ascending: true });
+        .order('due_date', { ascending: true })
+        .limit(5);
       
       if (tasksError) throw tasksError;
       
-      // Format tasks
-      const formattedTasks = tasksData.map(task => ({
+      const formattedTasks = (tasksData || []).map(task => ({
         id: task.id,
         title: task.title,
-        project: task.projects?.title || 'Unknown Project',
-        project_id: task.project_id,
-        dueDate: task.due_date,
         priority: task.priority,
         status: task.status,
-        assignedTo: task.assignee
+        due_date: task.due_date,
+        project_id: task.project_id,
+        project_name: task.projects?.title || 'Unknown Project'
       }));
       
-      // Limit to 4 most recent tasks for display
-      setTasks(formattedTasks.slice(0, 4));
+      setTasks(formattedTasks);
       
-      // Process project data to include task counts
-      const processedProjects = await Promise.all(projectsData.map(async (project) => {
-        // Count total tasks for this project
-        const { count: totalTasks, error: totalError } = await supabase
-          .from('tasks')
-          .select('*', { count: 'exact', head: true })
-          .eq('project_id', project.id);
-        
-        // Count completed tasks for this project
-        const { count: completedTasks, error: completedError } = await supabase
-          .from('tasks')
-          .select('*', { count: 'exact', head: true })
-          .eq('project_id', project.id)
-          .eq('status', 'completed');
-        
-        // Get team members for this project
-        const { data: members, error: membersError } = await supabase
-          .from('team_members')
-          .select('user_name')
-          .eq('project_id', project.id);
-        
-        if (totalError || completedError || membersError) throw new Error("Error fetching project details");
-        
-        return {
-          id: project.id,
-          title: project.title,
-          description: project.description,
-          progress: project.progress,
-          tasks: totalTasks || 0,
-          completedTasks: completedTasks || 0,
-          assignedUsers: members?.map(m => m.user_name) || [],
-          status: project.status
-        };
-      }));
-      
-      // Limit to 3 projects for display
-      setProjects(processedProjects.slice(0, 3));
-      
-      // Calculate statistics
-      const totalProjects = projectsData.length;
-      const activeTasks = formattedTasks.length;
-      const inProgressTasks = formattedTasks.filter(t => t.status === 'in-progress').length;
-      
-      // Calculate average completion percentage across all projects
-      let totalProgress = 0;
-      projectsData.forEach(p => {
-        totalProgress += p.progress;
-      });
-      const avgCompletion = projectsData.length > 0 ? Math.round(totalProgress / projectsData.length) : 0;
+      // Calculate stats
+      const completedTasks = (tasksData || []).filter(t => t.status === 'completed').length;
+      const pendingTasks = (tasksData || []).length - completedTasks;
+      const highPriorityTasks = (tasksData || []).filter(t => t.priority === 'high' && t.status !== 'completed').length;
       
       setStats({
-        totalProjects,
-        activeTasks,
-        inProgressTasks,
-        upcomingMeetings: 0, // No meetings data in database yet
-        avgCompletion
+        totalProjects: projectsData?.length || 0,
+        completedTasks,
+        pendingTasks,
+        highPriorityTasks
       });
       
-      // For now, use mock meetings data until we add a meetings table
-      setMeetings([
-        {
-          id: "1",
-          title: "Weekly Team Standup",
-          time: "09:30 AM - 10:00 AM",
-          date: "2023-10-16",
-          participants: 8,
-        },
-        {
-          id: "2",
-          title: "Product Review",
-          time: "11:00 AM - 12:00 PM",
-          date: "2023-10-16",
-          participants: 5,
-        },
-        {
-          id: "3",
-          title: "Client Presentation",
-          time: "02:00 PM - 03:30 PM",
-          date: "2023-10-17",
-          participants: 4,
-        },
-      ]);
-      
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      toast.error("Failed to load dashboard data");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case "high":
-        return <Badge variant="destructive">High</Badge>;
+        return <Badge variant="destructive" className="capitalize">{priority}</Badge>;
       case "medium":
-        return <Badge variant="default">Medium</Badge>;
+        return <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 capitalize">{priority}</Badge>;
       case "low":
-        return <Badge variant="secondary">Low</Badge>;
+        return <Badge variant="outline" className="capitalize">{priority}</Badge>;
       default:
-        return <Badge variant="outline">Unknown</Badge>;
+        return <Badge variant="secondary" className="capitalize">{priority}</Badge>;
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    };
-    return new Date(dateString).toLocaleDateString('en-US', options);
+  const projectChartData = projects.map(project => ({
+    name: project.title,
+    tasks: 5, // Replace with actual task count per project
+    meetings: 3, // Replace with actual meeting count per project
+  }));
+
+  const taskStatusData = [
+    { name: 'Completed', value: stats.completedTasks },
+    { name: 'Pending', value: stats.pendingTasks },
+  ];
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+
+  const RADIAN = Math.PI / 180;
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central">
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
   };
 
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="animate-spin-slow h-10 w-10 rounded-full border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
+    <div className="space-y-6">
+      <div className="flex flex-col space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Welcome back, {user?.name}
+        <p className="text-muted-foreground">
+          Welcome back, {user?.name || 'User'}! Here's an overview of your projects and tasks.
         </p>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="glass-panel glass-panel-hover">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Projects
-            </CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
+      {/* Stats Overview */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Projects</CardTitle>
+            <Folders className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalProjects}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.totalProjects > 0 ? "Active projects" : "No projects yet"}
+              Active projects you're contributing to
             </p>
           </CardContent>
         </Card>
-        <Card className="glass-panel glass-panel-hover">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active Tasks</CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
+            <CheckSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.activeTasks}</div>
+            <div className="text-2xl font-bold">{stats.completedTasks}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.inProgressTasks} in progress
+              Tasks you've successfully completed
             </p>
           </CardContent>
         </Card>
-        <Card className="glass-panel glass-panel-hover">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Meetings</CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <rect width="20" height="14" x="2" y="5" rx="2" />
-              <path d="M2 10h20" />
-            </svg>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{meetings.length}</div>
+            <div className="text-2xl font-bold">{stats.pendingTasks}</div>
             <p className="text-xs text-muted-foreground">
-              {meetings.filter((m) => new Date(m.date) > new Date()).length} upcoming
+              Tasks awaiting your attention
             </p>
           </CardContent>
         </Card>
-        <Card className="glass-panel glass-panel-hover">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Average Completion
-            </CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">High Priority</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.avgCompletion}%</div>
+            <div className="text-2xl font-bold">{stats.highPriorityTasks}</div>
             <p className="text-xs text-muted-foreground">
-              Project completion average
+              Tasks that need immediate attention
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {/* Tasks List */}
-        <Card className="glass-panel md:col-span-1 lg:col-span-1">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle>Pending Tasks</CardTitle>
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/pending-tasks")}>
-                View all
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
+      {/* Recent Tasks Section */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Your Pending Tasks</CardTitle>
             <CardDescription>
-              Your upcoming tasks that need attention
+              Recent tasks assigned to you that need attention
             </CardDescription>
-          </CardHeader>
-          <CardContent className="pb-1">
-            <div className="space-y-4">
-              {tasks.length > 0 ? tasks.map((task) => (
-                <div key={task.id} className="flex items-start space-x-4 p-2 rounded-md bg-card/70 hover:bg-card/90 transition-colors">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="truncate font-medium leading-none text-sm">
-                        {task.title}
-                      </h3>
+          </div>
+          <Link to="/pending-tasks">
+            <Button variant="outline" size="sm">
+              View All
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin h-8 w-8 rounded-full border-4 border-primary border-t-transparent"></div>
+            </div>
+          ) : tasks.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CheckSquare className="mx-auto h-12 w-12 mb-2 text-muted-foreground/50" />
+              <p>You're all caught up! No pending tasks.</p>
+            </div>
+          ) : (
+            <div className="space-y-4 mt-2">
+              {tasks.filter(task => task.status !== 'completed').slice(0, 5).map((task) => (
+                <div 
+                  key={task.id} 
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card text-card-foreground shadow-sm"
+                >
+                  <div className="space-y-1 md:pr-10">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{task.title}</span>
                       {getPriorityBadge(task.priority)}
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {task.project}
-                    </p>
-                    <div className="flex items-center pt-1 text-xs text-muted-foreground">
-                      <Clock className="mr-1 h-3 w-3" />
-                      <span>{task.dueDate ? formatDate(task.dueDate) : "No due date"}</span>
+                    <div className="text-sm text-muted-foreground">
+                      <span>{task.project_name}</span>
+                      {task.due_date && (
+                        <span className="ml-2 text-sm text-muted-foreground">
+                          · Due: {new Date(task.due_date).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
                   </div>
-                </div>
-              )) : (
-                <div className="text-center p-4 text-muted-foreground">
-                  No pending tasks
-                </div>
-              )}
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button className="w-full" onClick={() => navigate("/projects")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Manage Tasks
-            </Button>
-          </CardFooter>
-        </Card>
-
-        {/* Meetings List */}
-        <Card className="glass-panel md:col-span-1 lg:col-span-1">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle>Scheduled Meetings</CardTitle>
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/meetings")}>
-                View all
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
-            <CardDescription>
-              Your upcoming meetings and events
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pb-1">
-            <div className="space-y-4">
-              {meetings.map((meeting) => (
-                <div key={meeting.id} className="flex items-start space-x-4 p-2 rounded-md bg-card/70 hover:bg-card/90 transition-colors">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="truncate font-medium leading-none text-sm">
-                        {meeting.title}
-                      </h3>
-                    </div>
-                    <div className="flex items-center pt-1 text-xs text-muted-foreground">
-                      <Clock className="mr-1 h-3 w-3" />
-                      <span>{meeting.time}</span>
-                    </div>
-                    <div className="flex items-center pt-1 text-xs text-muted-foreground">
-                      <Users className="mr-1 h-3 w-3" />
-                      <span>{meeting.participants} participants</span>
-                    </div>
-                  </div>
+                  <Link to={`/projects/${task.project_id}`}>
+                    <Button size="sm" variant="outline">View</Button>
+                  </Link>
                 </div>
               ))}
+              <div className="text-center pt-2 pb-2 md:hidden">
+                <Link to="/pending-tasks">
+                  <Button variant="outline" size="sm" className="w-full">
+                    View All Tasks
+                  </Button>
+                </Link>
+              </div>
             </div>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" className="w-full" onClick={() => navigate("/meetings")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Schedule Meeting
-            </Button>
-          </CardFooter>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Project Progress */}
-        <Card className="glass-panel md:col-span-2 lg:col-span-1">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle>Project Progress</CardTitle>
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/projects")}>
-                View all
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
-            </div>
-            <CardDescription>
-              Status of your active projects
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pb-1">
-            <div className="space-y-4">
-              {projects.length > 0 ? projects.map((project) => (
-                <div key={project.id} className="space-y-2 p-2 rounded-md bg-card/70 hover:bg-card/90 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium truncate leading-none text-sm">
-                      {project.title}
-                    </h3>
-                    <span className="text-sm font-medium">{project.progress}%</span>
-                  </div>
-                  <Progress value={project.progress} className="h-1.5" />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>{project.completedTasks} of {project.tasks} tasks completed</span>
-                    <span className="truncate ml-2">Status: {project.status}</span>
-                  </div>
-                </div>
-              )) : (
-                <div className="text-center p-4 text-muted-foreground">
-                  No active projects
-                </div>
-              )}
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button className="w-full" onClick={() => navigate("/projects/new")}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Project
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+      {/* Projects and Charts Section */}
+      <Tabs defaultValue="projects" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="charts">Charts</TabsTrigger>
+        </TabsList>
+        <TabsContent value="projects" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {projects.map((project) => (
+              <Card key={project.id} className="overflow-hidden">
+                <CardHeader>
+                  <CardTitle>{project.title}</CardTitle>
+                  <CardDescription>{project.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Created at: {new Date(project.created_at).toLocaleDateString()}
+                  </p>
+                </CardContent>
+                <CardFooter>
+                  <Link to={`/projects/${project.id}`}>
+                    <Button>View Project</Button>
+                  </Link>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+        <TabsContent value="charts" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Project Overview</CardTitle>
+                <CardDescription>Tasks and meetings per project</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={projectChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="tasks" fill="#8884d8" />
+                    <Bar dataKey="meetings" fill="#82ca9d" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Task Status</CardTitle>
+                <CardDescription>Distribution of completed vs pending tasks</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={taskStatusData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={renderCustomizedLabel}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {taskStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

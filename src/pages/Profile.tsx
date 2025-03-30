@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera, QrCode, X } from "lucide-react";
+import { Camera, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -15,8 +14,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-  DialogClose,
 } from "@/components/ui/dialog";
 
 const Profile = () => {
@@ -29,9 +26,9 @@ const Profile = () => {
   const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   // Generate initials for avatar fallback
   const getInitials = (name: string) => {
@@ -50,6 +47,13 @@ const Profile = () => {
 
   const openCamera = async () => {
     setCameraError(null);
+    
+    // First close any existing stream
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    
     try {
       // First, check if media devices are supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -61,9 +65,16 @@ const Profile = () => {
         video: { facingMode: "user" } 
       });
       
+      setCameraStream(stream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        streamRef.current = stream;
+        // Ensure video is playing
+        try {
+          await videoRef.current.play();
+        } catch (e) {
+          console.error("Error playing video:", e);
+        }
       }
       
       setIsCameraOpen(true);
@@ -109,9 +120,9 @@ const Profile = () => {
 
   const closeCamera = () => {
     // Stop all video tracks
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
     }
     
     setIsCameraOpen(false);
@@ -120,11 +131,11 @@ const Profile = () => {
   // Ensure we clean up if the component unmounts while camera is open
   useEffect(() => {
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [cameraStream]);
 
   return (
     <div className="container max-w-2xl mx-auto py-6 animate-fade-in">

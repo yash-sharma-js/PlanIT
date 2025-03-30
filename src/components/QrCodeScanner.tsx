@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { QrReader } from 'react-qr-reader';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,28 @@ interface QrCodeScannerProps {
 
 const QrCodeScanner = ({ onScan, isOpen, onClose }: QrCodeScannerProps) => {
   const [error, setError] = useState<string | null>(null);
+  const [scanned, setScanned] = useState(false);
+
+  // Reset scanned state when dialog opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setScanned(false);
+      setError(null);
+    }
+  }, [isOpen]);
 
   const handleScan = (result: any) => {
-    if (result) {
-      // Extract the data from the QR code
+    if (result && !scanned) {
+      // Extract the data from the QR code and prevent multiple scans
       const scannedData = result?.text;
       if (scannedData) {
-        onScan(scannedData);
+        setScanned(true);
+        // For user QR codes, extract the username from the format planit://user/username
+        const username = scannedData.includes('planit://user/') 
+          ? scannedData.split('/').pop() 
+          : scannedData;
+          
+        onScan(username || '');
         onClose();
       }
     }
@@ -40,11 +55,12 @@ const QrCodeScanner = ({ onScan, isOpen, onClose }: QrCodeScannerProps) => {
         </DialogHeader>
         
         <div className="w-full h-64 relative overflow-hidden rounded-md">
-          {isOpen && (
+          {isOpen && !scanned && (
             <QrReader
               constraints={{ facingMode: 'environment' }}
               scanDelay={500}
               onResult={handleScan}
+              onError={handleError}
               videoStyle={{ width: '100%', height: '100%' }}
               videoContainerStyle={{ width: '100%', height: '100%', position: 'relative' }}
             />

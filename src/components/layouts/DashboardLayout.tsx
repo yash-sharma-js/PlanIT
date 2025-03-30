@@ -9,7 +9,8 @@ import {
   Menu,
   X,
   Plus,
-  User
+  User,
+  CheckSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -45,13 +46,18 @@ const DashboardLayout = () => {
   const navigationItems = [
     {
       name: "Dashboard",
-      path: "/",
+      path: "/dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
     },
     {
       name: "Projects",
       path: "/projects",
       icon: <Folders className="w-5 h-5" />,
+    },
+    {
+      name: "Pending Tasks",
+      path: "/pending-tasks",
+      icon: <CheckSquare className="w-5 h-5" />,
     },
     {
       name: "Meetings",

@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,13 +40,12 @@ const TeamMemberForm = ({ projectId, onSuccess, onCancel }: TeamMemberFormProps)
   };
 
   const handleQrCodeScan = (data: string) => {
-    // Extract username from QR code data (format: planit://user/username)
-    try {
-      const userName = data.split('/').pop() || '';
-      setFormData(prev => ({ ...prev, userName }));
-      toast.success(`User found: ${userName}`);
-    } catch (error) {
-      console.error('Error parsing QR code data:', data);
+    // Handle the username directly
+    if (data) {
+      setFormData(prev => ({ ...prev, userName: data }));
+      toast.success(`User found: ${data}`);
+      setShowQrScanner(false);
+    } else {
       toast.error("Invalid QR code format");
     }
   };
