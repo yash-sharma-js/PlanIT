@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera, QrCode } from "lucide-react";
+import { Camera, QrCode, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -29,6 +30,7 @@ const Profile = () => {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const location = "Chembur, Mumbai"; // Static location as requested
 
   // Generate initials for avatar fallback
   const getInitials = (name: string) => {
@@ -163,6 +165,10 @@ const Profile = () => {
             <CardTitle className="text-2xl">{user?.name}</CardTitle>
             <CardDescription>@{user?.userName || ""}</CardDescription>
             <CardDescription>{user?.email}</CardDescription>
+            <CardDescription className="flex items-center mt-1">
+              <MapPin className="h-3 w-3 mr-1" />
+              {location}
+            </CardDescription>
             
             <Button 
               variant="outline" 
@@ -203,6 +209,14 @@ const Profile = () => {
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 disabled={!isEditing || true} // Email always disabled for this demo
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <Input 
+                id="location" 
+                value={location}
+                disabled={true} // Location is static and not editable
               />
             </div>
           </form>
