@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -55,7 +54,6 @@ const CreateProject = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Auto-assign current user
     if (user?.userName) {
       setFormData(prev => ({
         ...prev,
@@ -96,7 +94,6 @@ const CreateProject = () => {
   };
 
   const handleRemoveUser = (userName: string) => {
-    // Don't allow removing the current user
     if (user?.userName === userName) {
       toast.error("You cannot remove yourself from the project");
       return;
@@ -111,7 +108,6 @@ const CreateProject = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate form data
     if (!formData.title) {
       toast.error("Project title is required");
       return;
@@ -132,11 +128,22 @@ const CreateProject = () => {
       return;
     }
     
-    // Submit form
+    fetch('http://localhost:8080/project/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: formData.title,
+        userId: user?.id
+      }),
+    }).catch(error => {
+      console.error('Error calling project create API:', error);
+    });
+    
     setIsSubmitting(true);
     
     try {
-      // Insert project
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
@@ -156,7 +163,6 @@ const CreateProject = () => {
         throw projectError;
       }
 
-      // Add team members
       const teamMembers = formData.assignedUsers.map(userName => ({
         project_id: project.id,
         user_name: userName,
@@ -171,7 +177,6 @@ const CreateProject = () => {
         throw teamError;
       }
 
-      // Log activity
       await supabase.from('activity_logs').insert({
         project_id: project.id,
         user_name: user?.userName || 'Unknown user',
@@ -190,7 +195,6 @@ const CreateProject = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col space-y-3 mb-2">
         <Button 
           variant="ghost" 
@@ -207,7 +211,6 @@ const CreateProject = () => {
         </p>
       </div>
 
-      {/* Project Form */}
       <Card className="glass-panel animate-scale-in max-w-3xl mx-auto">
         <form onSubmit={handleSubmit}>
           <CardHeader>
@@ -217,7 +220,6 @@ const CreateProject = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Project Title <span className="text-destructive">*</span></Label>
               <Input 
@@ -230,7 +232,6 @@ const CreateProject = () => {
               />
             </div>
 
-            {/* Description */}
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Textarea 
@@ -244,7 +245,6 @@ const CreateProject = () => {
               />
             </div>
 
-            {/* Dates */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Start Date <span className="text-destructive">*</span></Label>
@@ -314,7 +314,6 @@ const CreateProject = () => {
               </div>
             </div>
 
-            {/* Status and Priority */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Status</Label>
@@ -354,7 +353,6 @@ const CreateProject = () => {
               </div>
             </div>
 
-            {/* Assigned Users */}
             <div className="space-y-3">
               <Label>Assign Users <span className="text-destructive">*</span></Label>
               <div className="border rounded-md p-4">
@@ -363,7 +361,6 @@ const CreateProject = () => {
                   <span className="font-medium text-sm">Team Members</span>
                 </div>
                 
-                {/* Display assigned users */}
                 <div className="space-y-2 mb-4">
                   {formData.assignedUsers.map((userName) => (
                     <div key={userName} className="flex items-center justify-between p-2 bg-secondary/50 rounded-md">
@@ -386,7 +383,6 @@ const CreateProject = () => {
                   ))}
                 </div>
                 
-                {/* Add user input */}
                 <div className="flex space-x-2">
                   <Input
                     placeholder="Enter username"

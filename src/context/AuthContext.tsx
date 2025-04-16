@@ -131,6 +131,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       setLoading(true);
       
+      // Call the login API endpoint
+      fetch('http://localhost:8080/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      }).catch(error => {
+        console.error('Error calling login API:', error);
+      });
+      
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -154,6 +165,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const register = async (name: string, email: string, password: string, userName: string) => {
     try {
       setLoading(true);
+      
+      // Call the register API endpoint
+      fetch('http://localhost:8080/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, email, userName }),
+      }).catch(error => {
+        console.error('Error calling register API:', error);
+      });
       
       // Check if username already exists
       const { data: existingUsers, error: checkError } = await supabase
