@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/middleware";
@@ -37,40 +38,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Initialize auth state
   useEffect(() => {
+    let subscription: { unsubscribe: () => void } | null = null;
+    
     // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        
-        if (session?.user) {
-          // Get user profile from database
-          setTimeout(async () => {
-            const { data, error } = await supabase
-              .from('user_profiles')
-              .select('name, user_name, avatar')
-              .eq('id', session.user.id)
-              .single();
+    try {
+      const { data } = supabase.auth.onAuthStateChange(
+        (event, session) => {
+          setSession(session);
+          
+          if (session?.user) {
+            // Get user profile from database
+            setTimeout(async () => {
+              const { data, error } = await supabase
+                .from('user_profiles')
+                .select('name, user_name, avatar')
+                .eq('id', session.user.id)
+                .single();
 
-            if (error) {
-              console.error('Error fetching user profile:', error);
-              return;
-            }
+              if (error) {
+                console.error('Error fetching user profile:', error);
+                return;
+              }
 
-            if (data) {
-              setUser({
-                id: session.user.id,
-                email: session.user.email || '',
-                name: data.name || '',
-                userName: data.user_name || '',
-                avatar: data.avatar || '',
-              });
-            }
-          }, 0);
-        } else {
-          setUser(null);
+              if (data) {
+                setUser({
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  name: data.name || '',
+                  userName: data.user_name || '',
+                  avatar: data.avatar || '',
+                });
+              }
+            }, 0);
+          } else {
+            setUser(null);
+          }
         }
+      );
+      
+      if (data) {
+        subscription = data.subscription;
       }
-    );
+    } catch (error) {
+      console.error('Error setting up auth listener:', error);
+    }
 
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -107,7 +118,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     return () => {
-      subscription.unsubscribe();
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, []);
 
