@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Plus, 
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 
 interface Project {
   id: string;
@@ -43,6 +45,8 @@ interface Project {
   };
 }
 
+const ITEMS_PER_PAGE = 9;
+
 const Projects = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -53,49 +57,41 @@ const Projects = () => {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
-  useEffect(() => {
-    fetchProjects();
-  }, [user]);
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loading) return;
 
-  const fetchProjects = async () => {
     try {
       setLoading(true);
       
-      // Fetch projects
+      const from = page * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
-        .select('*');
+        .select('*')
+        .range(from, to)
+        .order('created_at', { ascending: false });
       
       if (projectsError) {
         toast.error("Error loading projects");
         console.error('Error fetching projects:', projectsError);
-        setLoading(false);
         return;
       }
 
-      // Fetch tasks counts for each project
       const projectsWithDetails = await Promise.all(
         projectsData.map(async (project) => {
-          // Fetch team members
-          const { data: teamMembers, error: teamError } = await supabase
+          const { data: teamMembers } = await supabase
             .from('team_members')
             .select('user_name')
             .eq('project_id', project.id);
 
-          if (teamError) {
-            console.error('Error fetching team members:', teamError);
-          }
-
-          // Count tasks
-          const { data: tasksData, error: tasksError } = await supabase
+          const { data: tasksData } = await supabase
             .from('tasks')
             .select('status')
             .eq('project_id', project.id);
-
-          if (tasksError) {
-            console.error('Error fetching tasks:', tasksError);
-          }
 
           const totalTasks = tasksData?.length || 0;
           const completedTasks = tasksData?.filter(task => task.status === 'completed')?.length || 0;
@@ -111,20 +107,29 @@ const Projects = () => {
         })
       );
 
-      setProjects(projectsWithDetails);
-      setFilteredProjects(projectsWithDetails);
+      setProjects(prev => [...prev, ...projectsWithDetails]);
+      setHasMore(projectsData.length === ITEMS_PER_PAGE);
+      setPage(prev => prev + 1);
     } catch (error) {
-      console.error('Error in fetchProjects:', error);
-      toast.error("Failed to load projects");
+      console.error('Error in loadMore:', error);
+      toast.error("Failed to load more projects");
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, hasMore, loading]);
+
+  const observerRef = useInfiniteScroll(loadMore);
+
+  useEffect(() => {
+    setProjects([]);
+    setPage(0);
+    setHasMore(true);
+    loadMore();
+  }, [searchQuery, statusFilter, priorityFilter, sortOption]);
 
   useEffect(() => {
     let result = [...projects];
 
-    // Apply search
     if (searchQuery) {
       result = result.filter(
         project =>
@@ -133,17 +138,14 @@ const Projects = () => {
       );
     }
 
-    // Apply status filter
     if (statusFilter) {
       result = result.filter(project => project.status === statusFilter);
     }
 
-    // Apply priority filter
     if (priorityFilter) {
       result = result.filter(project => project.priority === priorityFilter);
     }
 
-    // Apply sorting
     if (sortOption) {
       switch (sortOption) {
         case "name-asc":
@@ -230,17 +232,16 @@ const Projects = () => {
     toast.success("Filters have been reset");
   };
 
-  if (loading) {
+  if (loading && projects.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="animate-spin-slow h-10 w-10 rounded-full border-4 border-primary border-t-transparent"></div>
+        <div className="animate-spin h-10 w-10 rounded-full border-4 border-primary border-t-transparent"></div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
@@ -254,7 +255,6 @@ const Projects = () => {
         </Button>
       </div>
 
-      {/* Filters and Search */}
       <div className="flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -424,77 +424,85 @@ const Projects = () => {
         </div>
       </div>
 
-      {/* Projects Grid */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {filteredProjects.length > 0 ? (
-          filteredProjects.map((project) => (
-            <Card 
-              key={project.id} 
-              className="glass-panel glass-panel-hover overflow-hidden"
-              onClick={() => navigate(`/projects/${project.id}`)}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl">{project.title}</CardTitle>
-                    <div className="flex flex-wrap gap-2">
-                      {getStatusBadge(project.status)}
-                      {getPriorityBadge(project.priority)}
+      <ScrollArea className="h-[calc(100vh-200px)]">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredProjects.length > 0 ? (
+            <>
+              {filteredProjects.map((project) => (
+                <Card 
+                  key={project.id} 
+                  className="glass-panel glass-panel-hover overflow-hidden"
+                  onClick={() => navigate(`/projects/${project.id}`)}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <CardTitle className="text-xl">{project.title}</CardTitle>
+                        <div className="flex flex-wrap gap-2">
+                          {getStatusBadge(project.status)}
+                          {getPriorityBadge(project.priority)}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </CardHeader>
+                  <CardContent className="pb-3">
+                    <div className="space-y-4">
+                      <CardDescription className="line-clamp-2 min-h-[40px]">
+                        {project.description}
+                      </CardDescription>
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span>Progress</span>
+                          <span className="font-medium">{project.progress}%</span>
+                        </div>
+                        <Progress value={project.progress} className="h-2" />
+                      </div>
+                      <div className="flex items-center justify-between text-sm text-muted-foreground">
+                        <div className="flex items-center">
+                          <CheckCircle2 className="mr-1 h-4 w-4" />
+                          <span>
+                            {project.tasks.completed}/{project.tasks.total} tasks
+                          </span>
+                        </div>
+                        <div className="flex items-center">
+                          <Calendar className="mr-1 h-4 w-4" />
+                          <span>{formatDate(project.due_date)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="pt-2 border-t">
+                    <div className="w-full flex justify-between items-center">
+                      <div className="text-sm text-muted-foreground">
+                        {project.team.length} team members
+                      </div>
+                      <Button variant="ghost" size="sm" className="gap-1">
+                        View Details
+                      </Button>
+                    </div>
+                  </CardFooter>
+                </Card>
+              ))}
+              {hasMore && (
+                <div ref={observerRef} className="col-span-full flex justify-center p-4">
+                  <div className="animate-spin h-6 w-6 rounded-full border-2 border-primary border-t-transparent"></div>
                 </div>
-              </CardHeader>
-              <CardContent className="pb-3">
-                <div className="space-y-4">
-                  <CardDescription className="line-clamp-2 min-h-[40px]">
-                    {project.description}
-                  </CardDescription>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Progress</span>
-                      <span className="font-medium">{project.progress}%</span>
-                    </div>
-                    <Progress value={project.progress} className="h-2" />
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <div className="flex items-center">
-                      <CheckCircle2 className="mr-1 h-4 w-4" />
-                      <span>
-                        {project.tasks.completed}/{project.tasks.total} tasks
-                      </span>
-                    </div>
-                    <div className="flex items-center">
-                      <Calendar className="mr-1 h-4 w-4" />
-                      <span>{formatDate(project.due_date)}</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="pt-2 border-t">
-                <div className="w-full flex justify-between items-center">
-                  <div className="text-sm text-muted-foreground">
-                    {project.team.length} team members
-                  </div>
-                  <Button variant="ghost" size="sm" className="gap-1">
-                    View Details
-                  </Button>
-                </div>
-              </CardFooter>
-            </Card>
-          ))
-        ) : (
-          <div className="col-span-full flex flex-col items-center justify-center p-8 text-center">
-            <div className="rounded-full bg-muted p-3 mb-3">
-              <Search className="h-6 w-6 text-muted-foreground" />
+              )}
+            </>
+          ) : (
+            <div className="col-span-full flex flex-col items-center justify-center p-8 text-center">
+              <div className="rounded-full bg-muted p-3 mb-3">
+                <Search className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium">No projects found</h3>
+              <p className="text-muted-foreground mt-1 mb-4">
+                We couldn't find any projects matching your criteria.
+              </p>
+              <Button onClick={resetFilters}>Clear Filters</Button>
             </div>
-            <h3 className="text-lg font-medium">No projects found</h3>
-            <p className="text-muted-foreground mt-1 mb-4">
-              We couldn't find any projects matching your criteria.
-            </p>
-            <Button onClick={resetFilters}>Clear Filters</Button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 };
