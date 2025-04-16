@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/middleware";
 import { useAuth } from "@/context/AuthContext";
 import QrCodeScanner from "./QrCodeScanner";
 
@@ -55,7 +54,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
   };
 
   const handleQrCodeScan = (data: string) => {
-    // Assuming the QR code contains a username
     setFormData(prev => ({ ...prev, assignee: data }));
     toast.success(`User assigned: ${data}`);
   };
@@ -63,7 +61,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate form data
     if (!formData.title) {
       toast.error("Task title is required");
       return;
@@ -72,7 +69,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
     setIsSubmitting(true);
     
     try {
-      // Insert task
       const { data: task, error } = await supabase
         .from('tasks')
         .insert({
@@ -90,7 +86,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
 
       if (error) throw error;
 
-      // Log activity
       await supabase.from('activity_logs').insert({
         project_id: projectId,
         user_name: user?.userName || 'Unknown user',
@@ -109,7 +104,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Title */}
       <div className="space-y-2">
         <Label htmlFor="title">Task Title <span className="text-destructive">*</span></Label>
         <Input 
@@ -122,7 +116,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
         />
       </div>
 
-      {/* Description */}
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
         <Textarea 
@@ -136,7 +129,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
         />
       </div>
 
-      {/* Assignee */}
       <div className="space-y-2">
         <Label htmlFor="assignee">Assignee</Label>
         <div className="flex gap-2">
@@ -160,7 +152,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
         </div>
       </div>
 
-      {/* Due Date */}
       <div className="space-y-2">
         <Label>Due Date</Label>
         <Popover>
@@ -193,7 +184,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
         </Popover>
       </div>
 
-      {/* Status and Priority */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Status</Label>
@@ -232,7 +222,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
         </div>
       </div>
 
-      {/* Buttons */}
       <div className="flex justify-end gap-2">
         <Button 
           type="button" 
@@ -247,7 +236,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
         </Button>
       </div>
 
-      {/* QR Code Scanner */}
       <QrCodeScanner 
         isOpen={showQrScanner}
         onClose={() => setShowQrScanner(false)}

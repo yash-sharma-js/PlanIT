@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/middleware";
 import { useAuth } from "@/context/AuthContext";
 import QrCodeScanner from "./QrCodeScanner";
 
