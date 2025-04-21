@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,21 +65,6 @@ const TaskForm = ({ projectId, onSuccess, onCancel }: TaskFormProps) => {
       toast.error("Task title is required");
       return;
     }
-    
-    // Call the task create API endpoint
-    fetch('http://localhost:8080/task/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        title: formData.title,
-        projectId: projectId,
-        userId: user?.id
-      }),
-    }).catch(error => {
-      console.error('Error calling task create API:', error);
-    });
     
     setIsSubmitting(true);
     
