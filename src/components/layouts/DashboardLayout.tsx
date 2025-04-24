@@ -88,7 +88,7 @@ const DashboardLayout = () => {
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <h1 className="font-bold">PlanIT</h1>
+          <h1 className="font-bold">CloudList</h1>
         </div>
         
         <div className="flex items-center gap-2">
@@ -125,7 +125,7 @@ const DashboardLayout = () => {
 
       <aside className="hidden lg:flex lg:w-64 flex-col bg-sidebar fixed h-full">
         <div className="p-4 border-b border-sidebar-border">
-          <h1 className="font-bold text-xl text-sidebar-foreground">PlanIT</h1>
+          <h1 className="font-bold text-xl text-sidebar-foreground">CloudList</h1>
         </div>
         
         <nav className="flex-1 overflow-y-auto p-4">
